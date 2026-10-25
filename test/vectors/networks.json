@@ -37,8 +37,8 @@
         "supplyCap": "111111111000000000"
       },
       "evmChainID": 98200,
-      "banffActive": false,
-      "namingActive": false
+      "banffActive": true,
+      "namingActive": true
     },
     {
       "networkID": 5,

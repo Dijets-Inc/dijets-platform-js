@@ -38,13 +38,13 @@ describe("presets match the node's genesis", () => {
     expect(hrpForNetworkID(1337)).toBe("custom")
   })
 
-  test("placeholders: mainnet and Lothar node URLs, mainnet U-Chain ID; nothing else", () => {
+  test("placeholders: mainnet and Lothar node URLs; nothing else", () => {
     expect(isPlaceholder(MAINNET.endpoints.node)).toBe(true)
     expect(isPlaceholder(LOTHAR.endpoints.node)).toBe(true)
     expect(LOCAL.endpoints.node).toBe("http://127.0.0.1:9650")
-    expect(isPlaceholder(MAINNET.chains.U.id)).toBe(true)
     for (const p of PRESETS) {
       expect(isPlaceholder(p.chains.V.id)).toBe(false)
+      expect(isPlaceholder(p.chains.U.id)).toBe(false)
       expect(isPlaceholder(p.djtAssetID)).toBe(false)
     }
   })

@@ -1,7 +1,7 @@
 // OFFLINE. Configure endpoints and networks without touching library internals.
 import { DijetsClient, networks, withOverrides, defineNetwork } from "@dijets/platform-js"
 
-// A preset with your own node (and, once confirmed, the mainnet U-Chain ID).
+// A preset with your own node.
 const mainnet = withOverrides(networks.mainnet, { nodeUrl: "https://node.example.org:9650" })
 console.log(mainnet.name, "→", mainnet.endpoints.node)
 

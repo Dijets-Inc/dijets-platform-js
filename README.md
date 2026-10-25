@@ -41,7 +41,7 @@ It fills in any value the configuration leaves as a placeholder. If the node rep
 
 | Preset | ID | HRP | Node URL | Status |
 |---|---|---|---|---|
-| `mainnet` | 1 | `dijets` | **placeholder** | IDs from the node's genesis. The U-Chain ID is a **placeholder** (unresolved; read from the node on connect) |
+| `mainnet` | 1 | `dijets` | **placeholder** | IDs from the node's genesis (dijetsnodesgo 1.0.0, genesis of 2026-10-25), all checked against a node |
 | `lothar` | 5 | `lothar` | **placeholder** | IDs from the node's genesis, not yet confirmed against a live Lothar node |
 | `local` | 12345 | `local` | `http://127.0.0.1:9650` | IDs from the node's genesis |
 
@@ -65,8 +65,8 @@ await DijetsClient.connectFirst([{ network: "local", url: urlA }, { network: "lo
 
 Protocol facts that vary by network:
 
-- **Banff transaction types are not accepted on mainnet or Lothar.** Every M-Chain builder in this library uses the Apricot types, which work on all networks.
-- **The name registry is active only on local and custom networks.** Check with `client.names.isActive()`.
+- **Banff transaction types are not accepted on Lothar.** Every M-Chain builder in this library uses the Apricot types, which work on all networks.
+- **The name registry is active on mainnet, local and custom networks, not on Lothar.** Check with `client.names.isActive()`.
 
 ## Addresses
 
@@ -261,10 +261,9 @@ DIJETS_NODE_URL=http://127.0.0.1:19750 npm run test:integration
 
 | Feature | Status |
 |---|---|
-| Banff-only M-Chain transactions (permissionless validator and delegator, remove subnet validator, transform subnet) | Not implemented. Not accepted on mainnet or Lothar |
+| Banff-only M-Chain transactions (permissionless validator and delegator, remove subnet validator, transform subnet) | Not implemented. Accepted on mainnet, local and custom networks; not on Lothar |
 | Listing names by owner, search | Needs the explorer; listing by owner needs a new explorer route |
 | Arc health history | Explorer only |
-| Mainnet U-Chain ID | Placeholder until confirmed; read from the node on connect |
 | Public mainnet and Lothar RPC URLs | Placeholders |
 | Upstream's `Avalanche` class, the AVAX-named methods | Internal only |
 

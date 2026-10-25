@@ -95,9 +95,9 @@ export interface NetworkPreset {
   fees: Fees
   staking: Staking
   features: {
-    /** Banff M-Chain transaction types are accepted. False on mainnet and Lothar. */
+    /** Banff M-Chain transaction types are accepted. False on Lothar. */
     banff: boolean
-    /** The native name registry is active. False on mainnet and Lothar. */
+    /** The native name registry is active. False on Lothar. */
     naming: boolean
   }
   /** Where the values came from. */
@@ -120,16 +120,7 @@ export const MAINNET: NetworkPreset = {
   chains: {
     M: { id: M_CHAIN_ID },
     V: { id: "2abk8oCqF74M1L2UhsPGe1MMXoEkRVubGZxV1Nfn7aF5s5T8fM" },
-    // The repository genesis computes vWaU1HuvgqAQ9KkKSh5ThrxXvSCZ2ZDK1k8zeg2innRv2SdrN,
-    // but deployed configuration records 2QnyBA9…; unresolved, so it is read
-    // from the node on connect.
-    U: {
-      id: placeholder(
-        "mainnet U-Chain blockchain ID",
-        'connect() reads it with info.getBlockchainID("U")'
-      ),
-      evmChainID: 98200
-    }
+    U: { id: "vWaU1HuvgqAQ9KkKSh5ThrxXvSCZ2ZDK1k8zeg2innRv2SdrN", evmChainID: 98200 }
   },
   djtAssetID: "2U4xzjHGnxXKWzFKqVZVMEnnepKFRNcBC75346X129Nj7uzyP1",
   fees: {
@@ -154,9 +145,9 @@ export const MAINNET: NetworkPreset = {
     minConsumptionRate: 0.1,
     maxConsumptionRate: 0.12
   },
-  features: { banff: false, naming: false },
+  features: { banff: true, naming: true },
   source:
-    "dijetsnodesgo genesis/genesis_mainnet.go; IDs computed from genesis (V-Chain and asset match deployed configuration)"
+    "dijetsnodesgo 1.0.0 genesis/genesis_mainnet.go (genesis of 2026-10-25); IDs computed from genesis and checked against a node"
 }
 
 export const LOTHAR: NetworkPreset = {

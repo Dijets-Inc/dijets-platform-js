@@ -80,8 +80,8 @@ type MAvaxNamed = AvaxNamed | "exportAVAX" | "importAVAX"
 /**
  * M-Chain: the platform chain (validators, delegation, subnets, chain creation,
  * the name registry and Arcs). Snowman blocks, so heights are meaningful here.
- * On mainnet and Lothar only Apricot transaction types are accepted; the
- * builders inherited here are all Apricot types.
+ * On Lothar only Apricot transaction types are accepted; the builders
+ * inherited here are all Apricot types, which every network accepts.
  */
 export class MChainAPI extends PlatformVMAPI {
   getDJTAssetID = (refresh: boolean = false): Promise<Buffer> => this.getAVAXAssetID(refresh)

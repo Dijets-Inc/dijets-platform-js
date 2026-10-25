@@ -54,11 +54,11 @@ const discovered = (what: string) =>
  * IDs you leave out are read from the node by `connect()`. Fees and staking
  * parameters default to what the node itself uses for an unnamed network ID:
  * the local network's (dijetsnodesgo genesis/params.go). Banff and naming are
- * active on every network except mainnet and Lothar.
+ * active on every network except Lothar.
  */
 export function defineNetwork(input: CustomNetworkInput): NetworkPreset {
   const base = parametersForNetworkID(input.networkID)
-  const isPublic = input.networkID === MAINNET.networkID || input.networkID === LOTHAR.networkID
+  const gated = input.networkID === LOTHAR.networkID
   return {
     key: input.key ?? `network-${input.networkID}`,
     name: input.name ?? `Dijets network ${input.networkID}`,
@@ -76,7 +76,7 @@ export function defineNetwork(input: CustomNetworkInput): NetworkPreset {
     djtAssetID: input.djtAssetID ?? discovered("DJT asset ID"),
     fees: { ...base.fees, ...input.fees },
     staking: { ...base.staking, ...input.staking },
-    features: { banff: !isPublic, naming: !isPublic, ...input.features },
+    features: { banff: !gated, naming: !gated, ...input.features },
     source: "defineNetwork(); unspecified IDs are discovered from the node"
   }
 }
