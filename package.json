@@ -1,0 +1,82 @@
+{
+  "name": "@dijets/platform-js",
+  "version": "0.1.0",
+  "description": "TypeScript library for Dijets nodes: V-Chain, M-Chain and U-Chain clients, addresses, transactions, names and Arcs.",
+  "private": true,
+  "license": "BSD-3-Clause",
+  "author": "Dijets Inc. Limited",
+  "type": "commonjs",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "LICENSE.upstream",
+    "UPSTREAM.md"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsup && node scripts/check-dist.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "jest --selectProjects upstream dijets",
+    "test:upstream": "jest --selectProjects upstream",
+    "test:dijets": "jest --selectProjects dijets",
+    "test:integration": "jest --selectProjects integration --runInBand",
+    "lint": "eslint .",
+    "docs": "typedoc --out docs/api --entryPoints src/index.ts --tsconfig tsconfig.build.json --excludePrivate --readme none --name \"@dijets/platform-js\"",
+    "vectors": "./scripts/vectors.sh"
+  },
+  "dependencies": {
+    "assert": "2.0.0",
+    "axios": "0.34.0",
+    "bech32": "2.0.0",
+    "bip39": "3.0.4",
+    "bn.js": "5.2.5",
+    "buffer": "6.0.3",
+    "create-hash": "1.2.0",
+    "elliptic": "6.6.1",
+    "ethers": "5.8.0",
+    "hdkey": "2.1.0",
+    "isomorphic-ws": "5.0.0",
+    "randombytes": "2.1.0",
+    "store2": "2.14.4",
+    "ws": "8.22.0",
+    "xss": "1.0.13"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.17.0",
+    "@types/bn.js": "5.1.6",
+    "@types/create-hash": "1.2.6",
+    "@types/elliptic": "6.4.18",
+    "@types/hdkey": "2.0.3",
+    "@types/jest": "29.5.14",
+    "@types/node": "22.10.2",
+    "@types/randombytes": "2.0.3",
+    "@types/ws": "8.5.13",
+    "eslint": "9.17.0",
+    "jest": "29.7.0",
+    "jest-mock-axios": "4.5.0",
+    "ts-jest": "29.2.5",
+    "tsup": "8.3.5",
+    "tsx": "4.19.2",
+    "typedoc": "0.27.6",
+    "typescript": "5.6.3",
+    "typescript-eslint": "8.18.2"
+  },
+  "overrides": {
+    "ws": "8.22.0"
+  }
+}

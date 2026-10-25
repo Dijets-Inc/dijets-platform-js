@@ -1,0 +1,12 @@
+/** Low-level types shared by the chains: transactions, inputs, outputs, credentials, keychains and secp256k1 keys. */
+export * from "../upstream/common/assetamount"
+export * from "../upstream/common/credentials"
+export * from "../upstream/common/evmtx"
+export * from "../upstream/common/input"
+export * from "../upstream/common/interfaces"
+export * from "../upstream/common/keychain"
+export * from "../upstream/common/nbytes"
+export * from "../upstream/common/output"
+export * from "../upstream/common/secp256k1"
+export * from "../upstream/common/tx"
+export * from "../upstream/common/utxos"

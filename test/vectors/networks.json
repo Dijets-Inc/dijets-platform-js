@@ -1,0 +1,111 @@
+{
+  "fallbackHRP": "custom",
+  "networkIDToHRP": {
+    "1": "dijets",
+    "10": "testing",
+    "12345": "local",
+    "5": "lothar"
+  },
+  "networks": [
+    {
+      "networkID": 1,
+      "hrp": "dijets",
+      "mChain": "11111111111111111111111111111111LpoYY",
+      "vChain": "2abk8oCqF74M1L2UhsPGe1MMXoEkRVubGZxV1Nfn7aF5s5T8fM",
+      "uChain": "vWaU1HuvgqAQ9KkKSh5ThrxXvSCZ2ZDK1k8zeg2innRv2SdrN",
+      "djtAssetID": "2U4xzjHGnxXKWzFKqVZVMEnnepKFRNcBC75346X129Nj7uzyP1",
+      "fees": {
+        "addPrimaryNetworkDelegatorFee": "0",
+        "addPrimaryNetworkValidatorFee": "0",
+        "addSubnetDelegatorFee": "1000000",
+        "addSubnetValidatorFee": "1000000",
+        "createAssetTxFee": "10000000",
+        "createBlockchainTxFee": "1000000000",
+        "createSubnetTxFee": "1000000000",
+        "transformSubnetTxFee": "1000000000",
+        "txFee": "1000000"
+      },
+      "staking": {
+        "maxConsumptionRate": "0.12",
+        "maxStakeDuration": "31536000",
+        "maxValidatorStake": "3000000000000000",
+        "minConsumptionRate": "0.1",
+        "minDelegationFee": "20000",
+        "minDelegatorStake": "25000000000",
+        "minStakeDuration": "1209600",
+        "minValidatorStake": "2000000000000",
+        "supplyCap": "111111111000000000"
+      },
+      "evmChainID": 98200,
+      "banffActive": false,
+      "namingActive": false
+    },
+    {
+      "networkID": 5,
+      "hrp": "lothar",
+      "mChain": "11111111111111111111111111111111LpoYY",
+      "vChain": "2NZ41DrsnFvri1mjj7mw494bsu3LWLtzHHGmkmq5LJyPX8bzZE",
+      "uChain": "2FXwKL6ioNTtTn7qMVBm3YVRvdEGAJv1e1uaKMF8UzLNuy5caK",
+      "djtAssetID": "2NVTQnV6wqocU9MffGLP9HhAvnjy55MxnDJSEjLZLXMPyzN5Z6",
+      "fees": {
+        "addPrimaryNetworkDelegatorFee": "0",
+        "addPrimaryNetworkValidatorFee": "0",
+        "addSubnetDelegatorFee": "1000000",
+        "addSubnetValidatorFee": "1000000",
+        "createAssetTxFee": "10000000",
+        "createBlockchainTxFee": "100000000",
+        "createSubnetTxFee": "100000000",
+        "transformSubnetTxFee": "100000000",
+        "txFee": "1000000"
+      },
+      "staking": {
+        "maxConsumptionRate": "0.12",
+        "maxStakeDuration": "31536000",
+        "maxValidatorStake": "3000000000000000",
+        "minConsumptionRate": "0.1",
+        "minDelegationFee": "20000",
+        "minDelegatorStake": "1000000000",
+        "minStakeDuration": "86400",
+        "minValidatorStake": "1000000000",
+        "supplyCap": "666666666000000000"
+      },
+      "evmChainID": 381932,
+      "banffActive": false,
+      "namingActive": false
+    },
+    {
+      "networkID": 12345,
+      "hrp": "local",
+      "mChain": "11111111111111111111111111111111LpoYY",
+      "vChain": "25h261N5gt1J4jun7vWbuTsRWgUzAxHRXvLuzQXD3yJiTwyhn9",
+      "uChain": "296U3EP4ix4MGPjehERz3rbW2BgwkQeXmyomhGC9sBecF6fezz",
+      "djtAssetID": "iM8M9EHTy8hdqmGzt6R1Lf76VwNDJpnjT46Za6VsTnL6NaLdr",
+      "fees": {
+        "addPrimaryNetworkDelegatorFee": "0",
+        "addPrimaryNetworkValidatorFee": "0",
+        "addSubnetDelegatorFee": "1000000",
+        "addSubnetValidatorFee": "1000000",
+        "createAssetTxFee": "1000000",
+        "createBlockchainTxFee": "100000000",
+        "createSubnetTxFee": "100000000",
+        "transformSubnetTxFee": "100000000",
+        "txFee": "1000000"
+      },
+      "staking": {
+        "maxConsumptionRate": "0.12",
+        "maxStakeDuration": "31536000",
+        "maxValidatorStake": "3000000000000000",
+        "minConsumptionRate": "0.1",
+        "minDelegationFee": "20000",
+        "minDelegatorStake": "25000000000",
+        "minStakeDuration": "86400",
+        "minValidatorStake": "2000000000000",
+        "supplyCap": "720000000000000000"
+      },
+      "evmChainID": 43112,
+      "banffActive": true,
+      "namingActive": true
+    }
+  ],
+  "source": "dijetsnodesgo genesis"
+}

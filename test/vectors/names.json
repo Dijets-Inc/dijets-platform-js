@@ -1,0 +1,208 @@
+{
+  "memos": [
+    {
+      "memo": "djtname/1 to=alice g=1 v=2",
+      "valid": true,
+      "name": "alice",
+      "generation": "1",
+      "version": "2"
+    },
+    {
+      "memo": "djtname/1 to=alice g=0 v=2",
+      "valid": false
+    },
+    {
+      "memo": "djtname/1 to=alice g=01 v=2",
+      "valid": false
+    },
+    {
+      "memo": "djtname/1 to=Alice g=1 v=2",
+      "valid": false
+    },
+    {
+      "memo": "djtname/2 to=alice g=1 v=2",
+      "valid": false
+    },
+    {
+      "memo": "djtname/1 to=alice g=1",
+      "valid": false
+    },
+    {
+      "memo": "djtname/1  to=alice g=1 v=2",
+      "valid": false
+    },
+    {
+      "memo": "djtname/1 to=alice g=18446744073709551615 v=1",
+      "valid": true,
+      "name": "alice",
+      "generation": "18446744073709551615",
+      "version": "1"
+    },
+    {
+      "memo": "djtname/1 to=alice g=18446744073709551616 v=1",
+      "valid": false
+    }
+  ],
+  "names": [
+    {
+      "input": "alice",
+      "canonical": "alice"
+    },
+    {
+      "input": "Alice",
+      "canonical": "alice",
+      "validateRule": "not_canonical"
+    },
+    {
+      "input": "  @Bob  ",
+      "canonical": "bob",
+      "validateRule": "character"
+    },
+    {
+      "input": "@@bob",
+      "canonicaliseRule": "character",
+      "validateRule": "character"
+    },
+    {
+      "input": "al",
+      "canonicaliseRule": "too_short",
+      "validateRule": "too_short"
+    },
+    {
+      "input": "a",
+      "canonicaliseRule": "too_short",
+      "validateRule": "too_short"
+    },
+    {
+      "input": "",
+      "canonicaliseRule": "empty",
+      "validateRule": "empty"
+    },
+    {
+      "input": "abc",
+      "canonical": "abc"
+    },
+    {
+      "input": "a-b",
+      "canonicaliseRule": "chain_prefix",
+      "validateRule": "chain_prefix"
+    },
+    {
+      "input": "v-alice",
+      "canonicaliseRule": "chain_prefix",
+      "validateRule": "chain_prefix"
+    },
+    {
+      "input": "m-1",
+      "canonicaliseRule": "chain_prefix",
+      "validateRule": "chain_prefix"
+    },
+    {
+      "input": "u-x2",
+      "canonicaliseRule": "chain_prefix",
+      "validateRule": "chain_prefix"
+    },
+    {
+      "input": "alice--bob",
+      "canonicaliseRule": "double_hyphen",
+      "validateRule": "double_hyphen"
+    },
+    {
+      "input": "alice-",
+      "canonicaliseRule": "last_character",
+      "validateRule": "last_character"
+    },
+    {
+      "input": "-alice",
+      "canonicaliseRule": "first_character",
+      "validateRule": "first_character"
+    },
+    {
+      "input": "1alice",
+      "canonicaliseRule": "first_character",
+      "validateRule": "first_character"
+    },
+    {
+      "input": "alice1",
+      "canonical": "alice1"
+    },
+    {
+      "input": "ali.ce",
+      "canonicaliseRule": "hierarchical",
+      "validateRule": "hierarchical"
+    },
+    {
+      "input": "ali_ce",
+      "canonicaliseRule": "character",
+      "validateRule": "character"
+    },
+    {
+      "input": "ali ce",
+      "canonicaliseRule": "character",
+      "validateRule": "character"
+    },
+    {
+      "input": "alié",
+      "canonicaliseRule": "non_ascii",
+      "validateRule": "non_ascii"
+    },
+    {
+      "input": "﻿alice",
+      "canonicaliseRule": "non_ascii",
+      "validateRule": "non_ascii"
+    },
+    {
+      "input": " alice　",
+      "canonical": "alice",
+      "validateRule": "non_ascii"
+    },
+    {
+      "input": "dijets",
+      "canonicaliseRule": "reserved",
+      "validateRule": "reserved"
+    },
+    {
+      "input": "DJT",
+      "canonicaliseRule": "reserved",
+      "validateRule": "not_canonical"
+    },
+    {
+      "input": "registry",
+      "canonicaliseRule": "reserved",
+      "validateRule": "reserved"
+    },
+    {
+      "input": "abcdefghijklmnopqrstuvwxyz012345",
+      "canonical": "abcdefghijklmnopqrstuvwxyz012345"
+    },
+    {
+      "input": "abcdefghijklmnopqrstuvwxyz0123456",
+      "canonicaliseRule": "too_long",
+      "validateRule": "too_long"
+    },
+    {
+      "input": "ALICE",
+      "canonical": "alice",
+      "validateRule": "not_canonical"
+    },
+    {
+      "input": "x-ray",
+      "canonicaliseRule": "chain_prefix",
+      "validateRule": "chain_prefix"
+    },
+    {
+      "input": "xx-ray",
+      "canonical": "xx-ray"
+    },
+    {
+      "input": "a1",
+      "canonicaliseRule": "too_short",
+      "validateRule": "too_short"
+    },
+    {
+      "input": "zz9",
+      "canonical": "zz9"
+    }
+  ],
+  "source": "dijetsnodesgo vms/platformvm/names"
+}

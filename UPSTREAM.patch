@@ -1,0 +1,2911 @@
+diff -ruN --label upstream/src --label src/upstream upstream/src src/upstream
+--- upstream/src
++++ src/upstream
+@@ -1496,7 +1496,8 @@
+     const networkID: number = this.core.getNetworkID()
+     const blockchainID: Buffer = bintools.cb58Decode(this.blockchainID)
+     const avaxAssetID: Buffer = await this.getAVAXAssetID()
+-    const fee: BN = this.getDefaultCreationTxFee()
++    // DIJETS: upstream used getDefaultCreationTxFee(), ignoring setCreationTxFee().
++    const fee: BN = this.getCreationTxFee()
+     const builtUnsignedTx: UnsignedTx = utxoset.buildCreateAssetTx(
+       networkID,
+       blockchainID,
+@@ -2076,12 +2077,12 @@
+    * This class should not be instantiated directly. Instead use the [[Avalanche.addAP`${I}`]] method.
+    *
+    * @param core A reference to the Avalanche class
+-   * @param baseURL Defaults to the string "/ext/bc/X" as the path to blockchain's baseURL
++   * @param baseURL Defaults to the string "/ext/bc/V" as the path to blockchain's baseURL
+    * @param blockchainID The Blockchain"s ID. Defaults to an empty string: ""
+    */
+   constructor(
+     core: AvalancheCore,
+-    baseURL: string = "/ext/bc/X",
++    baseURL: string = "/ext/bc/V",
+     blockchainID: string = ""
+   ) {
+     super(core, baseURL)
+diff -ruN --label upstream/src --label src/upstream upstream/src src/upstream
+--- upstream/src
++++ src/upstream
+@@ -181,17 +181,14 @@
+       assetID: asset
+     }
+ 
+-    const tmpBaseURL: string = this.getBaseURL()
+-
+-    // set base url to get asset description
+-    this.setBaseURL("/ext/bc/X")
++    // DIJETS: asset descriptions live on the V-Chain. Upstream switched this
++    // client's base URL to the X-Chain and back around the call, which sent any
++    // concurrent U-Chain request to the wrong chain; pass the path per call.
+     const response: RequestResponseData = await this.callMethod(
+       "avm.getAssetDescription",
+-      params
++      params,
++      "/ext/bc/V"
+     )
+-
+-    // set base url back what it originally was
+-    this.setBaseURL(tmpBaseURL)
+     return {
+       name: response.data.result.name,
+       symbol: response.data.result.symbol,
+@@ -258,7 +255,7 @@
+     const params: string[] = [hexAddress, blockHeight, assetID]
+ 
+     const method: string = "eth_getAssetBalance"
+-    const path: string = "ext/bc/C/rpc"
++    const path: string = "ext/bc/U/rpc" // DIJETS: the node has no C alias
+     const response: RequestResponseData = await this.callMethod(
+       method,
+       params,
+@@ -280,7 +277,7 @@
+     }
+ 
+     const response: RequestResponseData = await this.callMethod(
+-      "avax.getAtomicTxStatus",
++      "djtx.getAtomicTxStatus",
+       params
+     )
+     return response.data.result.status
+@@ -301,7 +298,7 @@
+     }
+ 
+     const response: RequestResponseData = await this.callMethod(
+-      "avax.getAtomicTx",
++      "djtx.getAtomicTx",
+       params
+     )
+     return response.data.result.tx
+@@ -347,7 +344,7 @@
+       assetID
+     }
+     const response: RequestResponseData = await this.callMethod(
+-      "avax.export",
++      "djtx.export",
+       params
+     )
+     return response.data.result.txID
+@@ -380,7 +377,7 @@
+       password
+     }
+     const response: RequestResponseData = await this.callMethod(
+-      "avax.exportAVAX",
++      "djtx.exportDJTX",
+       params
+     )
+     return response.data.result.txID
+@@ -428,7 +425,7 @@
+     }
+ 
+     const response: RequestResponseData = await this.callMethod(
+-      "avax.getUTXOs",
++      "djtx.getUTXOs",
+       params
+     )
+     const utxos: UTXOSet = new UTXOSet()
+@@ -473,7 +470,7 @@
+       password
+     }
+     const response: RequestResponseData = await this.callMethod(
+-      "avax.import",
++      "djtx.import",
+       params
+     )
+     return response.data.result.txID
+@@ -508,7 +505,7 @@
+       password
+     }
+     const response: RequestResponseData = await this.callMethod(
+-      "avax.importAVAX",
++      "djtx.importDJTX",
+       params
+     )
+     return response.data.result.txID
+@@ -536,7 +533,7 @@
+       privateKey
+     }
+     const response: RequestResponseData = await this.callMethod(
+-      "avax.importKey",
++      "djtx.importKey",
+       params
+     )
+     return response.data.result.address
+@@ -572,7 +569,7 @@
+       encoding: "hex"
+     }
+     const response: RequestResponseData = await this.callMethod(
+-      "avax.issueTx",
++      "djtx.issueTx",
+       params
+     )
+     return response.data.result.txID
+@@ -600,7 +597,7 @@
+       address
+     }
+     const response: RequestResponseData = await this.callMethod(
+-      "avax.exportKey",
++      "djtx.exportKey",
+       params
+     )
+     return response.data.result
+@@ -734,9 +731,12 @@
+         "Error - EVMAPI.buildExportTx: Destination ChainID must be 32 bytes in length."
+       )
+     }
+-    const assetDescription: any = await this.getAssetDescription("AVAX")
++    // DIJETS: upstream looked the native asset up as "AVAX" and compared its
++    // cb58 form with `assetID` even when `assetID` was a Buffer.
++    const nativeAssetID: string = bintools.cb58Encode(await this.getAVAXAssetID())
++    const assetIDStr: string = typeof assetID === "string" ? assetID : bintools.cb58Encode(assetID)
+     let evmInputs: EVMInput[] = []
+-    if (bintools.cb58Encode(assetDescription.assetID) === assetID) {
++    if (nativeAssetID === assetIDStr) {
+       const evmInput: EVMInput = new EVMInput(
+         fromAddressHex,
+         amount.add(fee),
+@@ -752,7 +752,7 @@
+       const evmAVAXInput: EVMInput = new EVMInput(
+         fromAddressHex,
+         fee,
+-        assetDescription.assetID,
++        nativeAssetID,
+         nonce
+       )
+       evmAVAXInput.addSignatureIdx(0, bintools.stringToAddress(fromAddressBech))
+@@ -781,7 +781,7 @@
+       threshold
+     )
+     const transferableOutput: TransferableOutput = new TransferableOutput(
+-      bintools.cb58Decode(assetID),
++      bintools.cb58Decode(assetIDStr), // DIJETS: assetID may be a Buffer, as the signature allows
+       secpTransferOutput
+     )
+     exportedOuts.push(transferableOutput)
+@@ -864,12 +864,12 @@
+    * Instead use the [[Avalanche.addAPI]] method.
+    *
+    * @param core A reference to the Avalanche class
+-   * @param baseURL Defaults to the string "/ext/bc/C/avax" as the path to blockchain's baseURL
++   * @param baseURL Defaults to the string "/ext/bc/U/djtx" as the path to blockchain's baseURL
+    * @param blockchainID The Blockchain's ID. Defaults to an empty string: ""
+    */
+   constructor(
+     core: AvalancheCore,
+-    baseURL: string = "/ext/bc/C/avax",
++    baseURL: string = "/ext/bc/U/djtx",
+     blockchainID: string = ""
+   ) {
+     super(core, baseURL)
+@@ -893,7 +893,7 @@
+   getBaseFee = async (): Promise<string> => {
+     const params: string[] = []
+     const method: string = "eth_baseFee"
+-    const path: string = "ext/bc/C/rpc"
++    const path: string = "ext/bc/U/rpc" // DIJETS: the node has no C alias
+     const response: RequestResponseData = await this.callMethod(
+       method,
+       params,
+@@ -911,7 +911,7 @@
+     const params: string[] = []
+ 
+     const method: string = "eth_maxPriorityFeePerGas"
+-    const path: string = "ext/bc/C/rpc"
++    const path: string = "ext/bc/U/rpc" // DIJETS: the node has no C alias
+     const response: RequestResponseData = await this.callMethod(
+       method,
+       params,
+diff -ruN --label upstream/src --label src/upstream upstream/src src/upstream
+--- upstream/src
++++ src/upstream
+@@ -219,7 +219,8 @@
+    * @param core A reference to the Avalanche class
+    * @param baseURL Defaults to the string "/ext/index/X/tx" as the path to rpc's baseURL
+    */
+-  constructor(core: AvalancheCore, baseURL: string = "/ext/index/X/tx") {
++  // DIJETS: the default index is the V-Chain transaction index
++  constructor(core: AvalancheCore, baseURL: string = "/ext/index/V/tx") {
+     super(core, baseURL)
+   }
+ }
+diff -ruN --label upstream/src --label src/upstream upstream/src src/upstream
+--- upstream/src
++++ src/upstream
+@@ -857,7 +857,7 @@
+       amount: amount.toString(10)
+     }
+     const response: RequestResponseData = await this.callMethod(
+-      "platform.exportAVAX",
++      "platform.exportDJTX",
+       params
+     )
+     return response.data.result.txID
+@@ -893,7 +893,7 @@
+       password
+     }
+     const response: RequestResponseData = await this.callMethod(
+-      "platform.importAVAX",
++      "platform.importDJTX",
+       params
+     )
+     return response.data.result.txID
+@@ -1553,7 +1553,7 @@
+       endTime,
+       weight,
+       subnetID,
+-      this.getDefaultTxFee(),
++      this.getTxFee(), // DIJETS: upstream used getDefaultTxFee(), ignoring setTxFee()
+       avaxAssetID,
+       memo,
+       asOf,
+@@ -1966,7 +1966,7 @@
+    * @param core A reference to the Avalanche class
+    * @param baseURL Defaults to the string "/ext/P" as the path to blockchain's baseURL
+    */
+-  constructor(core: AvalancheCore, baseURL: string = "/ext/bc/P") {
++  constructor(core: AvalancheCore, baseURL: string = "/ext/bc/M") {
+     super(core, baseURL)
+     this.blockchainID = PlatformChainID
+     const netID: number = core.getNetworkID()
+diff -ruN --label upstream/src --label src/upstream upstream/src src/upstream
+--- upstream/src
++++ src/upstream
+@@ -47,6 +47,11 @@
+ 
+   static REWARDVALIDATORTX: number = 20
+ 
++  // DIJETS: the name registry (dijetsnodesgo vms/platformvm/txs/codec.go)
++  static REGISTERNAMETX: number = 33
++
++  static UPDATENAMETX: number = 34
++
+   static SECPCREDENTIAL: number = 9
+ 
+   static ASSETIDLEN: number = 32
+diff -ruN --label upstream/src --label src/upstream upstream/src src/upstream
+--- upstream/src
++++ src/upstream
+@@ -19,6 +19,23 @@
+  * @ignore
+  */
+ const bintools: BinTools = BinTools.getInstance()
++
++// DIJETS: a 32-byte ID from a cb58 string (with checksum) or a name of at most 32 bytes.
++const idFromNameOrCB58 = (id: string): Buffer => {
++  if (id.length >= 40) {
++    try {
++      const b: Buffer = bintools.cb58Decode(id)
++      if (b.length === 32) return b
++    } catch {
++      // not cb58: treat as a name
++    }
++  }
++  const name: Buffer = Buffer.from(id, "utf8")
++  if (name.length > 32) throw new Error(`"${id}" is neither a cb58 ID nor a VM name of at most 32 bytes`)
++  const buf: Buffer = Buffer.alloc(32)
++  name.copy(buf)
++  return buf
++}
+ const serialization: Serialization = Serialization.getInstance()
+ 
+ /**
+@@ -302,7 +319,7 @@
+     chainName: string = undefined,
+     vmID: string = undefined,
+     fxIDs: string[] = undefined,
+-    genesisData: string | GenesisData = undefined
++    genesisData: string | GenesisData | Buffer = undefined
+   ) {
+     super(networkID, blockchainID, outs, ins, memo)
+     if (typeof subnetID != "undefined") {
+@@ -315,22 +332,20 @@
+     if (typeof chainName != "undefined") {
+       this.chainName = chainName
+     }
++    // DIJETS: VM and Fx IDs may be given as the node's padded names ("avm",
++    // "secp256k1fx") or as cb58 IDs, which is what the node's APIs return.
++    // Upstream only took names, so a cb58 ID was silently written as text.
+     if (typeof vmID != "undefined") {
+-      const buf: Buffer = Buffer.alloc(32)
+-      buf.write(vmID, 0, vmID.length)
+-      this.vmID = buf
++      this.vmID = idFromNameOrCB58(vmID)
+     }
+     if (typeof fxIDs != "undefined") {
+       this.numFXIDs.writeUInt32BE(fxIDs.length, 0)
+-      const fxIDBufs: Buffer[] = []
+-      fxIDs.forEach((fxID: string): void => {
+-        const buf: Buffer = Buffer.alloc(32)
+-        buf.write(fxID, 0, fxID.length, "utf8")
+-        fxIDBufs.push(buf)
+-      })
+-      this.fxIDs = fxIDBufs
++      this.fxIDs = fxIDs.map(idFromNameOrCB58)
+     }
+-    if (typeof genesisData != "undefined" && typeof genesisData != "string") {
++    if (Buffer.isBuffer(genesisData)) {
++      // DIJETS: raw genesis bytes, as an Arc's AVM genesis is built
++      this.genesisData = genesisData as Buffer
++    } else if (typeof genesisData != "undefined" && typeof genesisData != "string") {
+       this.genesisData = genesisData.toBuffer()
+     } else if (typeof genesisData == "string") {
+       this.genesisData = Buffer.from(genesisData)
+diff -ruN --label upstream/src --label src/upstream upstream/src src/upstream
+--- upstream/src
++++ src/upstream
+@@ -7,6 +7,7 @@
+ export * from "./credentials"
+ export * from "./exporttx"
+ export * from "./importtx"
++export * from "./nametxs"
+ export * from "./inputs"
+ export * from "./interfaces"
+ export * from "./keychain"
+diff -ruN --label upstream/src --label src/upstream upstream/src src/upstream
+--- upstream/src
++++ src/upstream
+@@ -0,0 +1,283 @@
++/**
++ * DIJETS addition (not in upstream avalanche.js): the name registry's two
++ * M-Chain transactions, type IDs 33 and 34 in the platformvm codec
++ * (dijetsnodesgo vms/platformvm/txs/register_name_tx.go, update_name_tx.go).
++ *
++ * Layout, after the BaseTx fields (linear codec, big-endian):
++ *   RegisterNameTx: name (u16 length + bytes), target (20 bytes),
++ *     owner (u32 type 11 + OutputOwners), expiry (u64),
++ *     targetAuthorization (u32 type 10 + secp256k1fx.Input)
++ *   UpdateNameTx:   name, version (u64), target, owner, expiry, revoke (1 byte),
++ *     nameAuthorization, targetAuthorization
++ *
++ * Credentials follow the inputs in this order (wallet/chain/p/signer_visitor.go):
++ * base inputs, then (UpdateNameTx only) the current owner, then the target.
++ * The target credential has no signatures when the target is unchanged.
++ */
++import { Buffer } from "buffer/"
++import BN from "bn.js"
++import BinTools from "../../utils/bintools"
++import { PlatformVMConstants } from "./constants"
++import { TransferableOutput, SECPOwnerOutput } from "./outputs"
++import { TransferableInput } from "./inputs"
++import { BaseTx } from "./basetx"
++import { SubnetAuth } from "./subnetauth"
++import { SelectCredentialClass } from "./credentials"
++import { Credential, Signature } from "../../common/credentials"
++import { KeyChain } from "./keychain"
++import { DefaultNetworkID } from "../../utils/constants"
++import { TransactionError } from "../../utils/errors"
++
++const bintools: BinTools = BinTools.getInstance()
++
++const u64 = (v: BN): Buffer => bintools.fromBNToBuffer(v, 8) as Buffer
++const nameBytes = (name: string): Buffer => {
++  const body = Buffer.from(name, "utf8")
++  const len = Buffer.alloc(2)
++  len.writeUInt16BE(body.length, 0)
++  return Buffer.concat([len, body])
++}
++const ownerBytes = (owner: SECPOwnerOutput): Buffer => {
++  const typeID = Buffer.alloc(4)
++  typeID.writeUInt32BE(owner.getOutputID(), 0)
++  return Buffer.concat([typeID, owner.toBuffer()])
++}
++
++/** An authorisation: signature indices into an owner's addresses, and those addresses' signers. */
++const authFor = (signers: Buffer[]): SubnetAuth => {
++  const auth = new SubnetAuth()
++  signers.forEach((_a, i) => {
++    const idx = Buffer.alloc(4)
++    idx.writeUInt32BE(i, 0)
++    auth.addAddressIndex(idx)
++  })
++  return auth
++}
++
++const credentialFrom = (msg: Buffer, kc: KeyChain, signers: Buffer[]): Credential => {
++  const cred: Credential = SelectCredentialClass(PlatformVMConstants.SECPCREDENTIAL)
++  for (const address of signers) {
++    const keypair = kc.getKey(address)
++    if (!keypair) {
++      throw new TransactionError(`Error - name transaction: no key in the keychain for ${bintools.cb58Encode(address)}`)
++    }
++    const sig = new Signature()
++    sig.fromBuffer(keypair.sign(msg))
++    cred.addSignature(sig)
++  }
++  return cred
++}
++
++export class RegisterNameTx extends BaseTx {
++  protected _typeName = "RegisterNameTx"
++  protected _typeID = PlatformVMConstants.REGISTERNAMETX
++
++  protected name: string = ""
++  protected target: Buffer = Buffer.alloc(20)
++  protected owner: SECPOwnerOutput = new SECPOwnerOutput()
++  protected expiry: Buffer = Buffer.alloc(8)
++  protected targetAuth: SubnetAuth = new SubnetAuth()
++
++  getTxType(): number {
++    return this._typeID
++  }
++  getName = (): string => this.name
++  getTarget = (): Buffer => this.target
++  getOwner = (): SECPOwnerOutput => this.owner
++  getExpiry = (): BN => bintools.fromBufferToBN(this.expiry)
++
++  fromBuffer(bytes: Buffer, offset: number = 0): number {
++    offset = super.fromBuffer(bytes, offset)
++    const len = bintools.copyFrom(bytes, offset, offset + 2).readUInt16BE(0)
++    offset += 2
++    this.name = bintools.copyFrom(bytes, offset, offset + len).toString("utf8")
++    offset += len
++    this.target = bintools.copyFrom(bytes, offset, offset + 20)
++    offset += 20
++    offset += 4 // owner type ID
++    this.owner = new SECPOwnerOutput()
++    offset = this.owner.fromBuffer(bytes, offset)
++    this.expiry = bintools.copyFrom(bytes, offset, offset + 8)
++    offset += 8
++    this.targetAuth = new SubnetAuth()
++    offset = this.targetAuth.fromBuffer(bytes, offset)
++    return offset
++  }
++
++  toBuffer(): Buffer {
++    return Buffer.concat([
++      super.toBuffer(),
++      nameBytes(this.name),
++      this.target,
++      ownerBytes(this.owner),
++      this.expiry,
++      this.targetAuth.toBuffer()
++    ])
++  }
++
++  clone(): this {
++    const tx = new RegisterNameTx()
++    tx.fromBuffer(this.toBuffer())
++    return tx as this
++  }
++
++  create(...args: any[]): this {
++    return new RegisterNameTx(...args) as this
++  }
++
++  /** Base inputs, then the target's consent. */
++  sign(msg: Buffer, kc: KeyChain): Credential[] {
++    const creds = super.sign(msg, kc)
++    creds.push(credentialFrom(msg, kc, [this.target]))
++    return creds
++  }
++
++  constructor(
++    networkID: number = DefaultNetworkID,
++    blockchainID: Buffer = Buffer.alloc(32, 16),
++    outs: TransferableOutput[] = undefined,
++    ins: TransferableInput[] = undefined,
++    memo: Buffer = undefined,
++    name: string = undefined,
++    target: Buffer = undefined,
++    owner: SECPOwnerOutput = undefined,
++    expiry: BN = undefined
++  ) {
++    super(networkID, blockchainID, outs, ins, memo)
++    if (name !== undefined) this.name = name
++    if (target !== undefined) this.target = target
++    if (owner !== undefined) this.owner = owner
++    if (expiry !== undefined) this.expiry = u64(expiry)
++    // The target signs at index 0 of the owner {threshold 1, [target]}.
++    this.targetAuth = authFor([this.target])
++  }
++}
++
++export class UpdateNameTx extends BaseTx {
++  protected _typeName = "UpdateNameTx"
++  protected _typeID = PlatformVMConstants.UPDATENAMETX
++
++  protected name: string = ""
++  protected version: Buffer = Buffer.alloc(8)
++  protected target: Buffer = Buffer.alloc(20)
++  protected owner: SECPOwnerOutput = new SECPOwnerOutput()
++  protected expiry: Buffer = Buffer.alloc(8)
++  protected revoke: Buffer = Buffer.alloc(1)
++  protected nameAuth: SubnetAuth = new SubnetAuth()
++  protected targetAuth: SubnetAuth = new SubnetAuth()
++  /** Addresses of the current owner that sign, by signature index. Not serialised. */
++  protected ownerSigners: Buffer[] = []
++  /** Whether the target changes (and so must consent). Not serialised. */
++  protected targetChanges: boolean = false
++
++  getTxType(): number {
++    return this._typeID
++  }
++  getName = (): string => this.name
++  getVersion = (): BN => bintools.fromBufferToBN(this.version)
++  getTarget = (): Buffer => this.target
++  getOwner = (): SECPOwnerOutput => this.owner
++  getExpiry = (): BN => bintools.fromBufferToBN(this.expiry)
++  isRevoke = (): boolean => this.revoke[0] === 1
++
++  fromBuffer(bytes: Buffer, offset: number = 0): number {
++    offset = super.fromBuffer(bytes, offset)
++    const len = bintools.copyFrom(bytes, offset, offset + 2).readUInt16BE(0)
++    offset += 2
++    this.name = bintools.copyFrom(bytes, offset, offset + len).toString("utf8")
++    offset += len
++    this.version = bintools.copyFrom(bytes, offset, offset + 8)
++    offset += 8
++    this.target = bintools.copyFrom(bytes, offset, offset + 20)
++    offset += 20
++    offset += 4 // owner type ID
++    this.owner = new SECPOwnerOutput()
++    offset = this.owner.fromBuffer(bytes, offset)
++    this.expiry = bintools.copyFrom(bytes, offset, offset + 8)
++    offset += 8
++    this.revoke = bintools.copyFrom(bytes, offset, offset + 1)
++    offset += 1
++    this.nameAuth = new SubnetAuth()
++    offset = this.nameAuth.fromBuffer(bytes, offset)
++    this.targetAuth = new SubnetAuth()
++    offset = this.targetAuth.fromBuffer(bytes, offset)
++    return offset
++  }
++
++  toBuffer(): Buffer {
++    return Buffer.concat([
++      super.toBuffer(),
++      nameBytes(this.name),
++      this.version,
++      this.target,
++      ownerBytes(this.owner),
++      this.expiry,
++      this.revoke,
++      this.nameAuth.toBuffer(),
++      this.targetAuth.toBuffer()
++    ])
++  }
++
++  clone(): this {
++    const tx = new UpdateNameTx()
++    tx.fromBuffer(this.toBuffer())
++    ;(tx as any).ownerSigners = this.ownerSigners
++    ;(tx as any).targetChanges = this.targetChanges
++    return tx as this
++  }
++
++  create(...args: any[]): this {
++    return new UpdateNameTx(...args) as this
++  }
++
++  /** Base inputs, then the current owner, then the target (no signatures if unchanged). */
++  sign(msg: Buffer, kc: KeyChain): Credential[] {
++    const creds = super.sign(msg, kc)
++    creds.push(credentialFrom(msg, kc, this.ownerSigners))
++    creds.push(credentialFrom(msg, kc, this.targetChanges ? [this.target] : []))
++    return creds
++  }
++
++  /**
++   * @param ownerSigners The current owner's addresses that sign, in the
++   *   order of their indices in the current owner's (sorted) address list.
++   * @param ownerSigIndices Those indices.
++   * @param targetChanges True if `target` differs from the record's target.
++   */
++  constructor(
++    networkID: number = DefaultNetworkID,
++    blockchainID: Buffer = Buffer.alloc(32, 16),
++    outs: TransferableOutput[] = undefined,
++    ins: TransferableInput[] = undefined,
++    memo: Buffer = undefined,
++    name: string = undefined,
++    version: BN = undefined,
++    target: Buffer = undefined,
++    owner: SECPOwnerOutput = undefined,
++    expiry: BN = undefined,
++    revoke: boolean = false,
++    ownerSigners: Buffer[] = [],
++    ownerSigIndices: number[] = [],
++    targetChanges: boolean = false
++  ) {
++    super(networkID, blockchainID, outs, ins, memo)
++    if (name !== undefined) this.name = name
++    if (version !== undefined) this.version = u64(version)
++    if (target !== undefined) this.target = target
++    if (owner !== undefined) this.owner = owner
++    if (expiry !== undefined) this.expiry = u64(expiry)
++    this.revoke = Buffer.from([revoke ? 1 : 0])
++    if (ownerSigners.length !== ownerSigIndices.length) {
++      throw new TransactionError("Error - UpdateNameTx: one signature index per owner signer")
++    }
++    this.ownerSigners = ownerSigners
++    this.nameAuth = new SubnetAuth()
++    for (const i of ownerSigIndices) {
++      const idx = Buffer.alloc(4)
++      idx.writeUInt32BE(i, 0)
++      this.nameAuth.addAddressIndex(idx)
++    }
++    this.targetChanges = targetChanges
++    this.targetAuth = targetChanges ? authFor([this.target]) : new SubnetAuth()
++  }
++}
+diff -ruN --label upstream/src --label src/upstream upstream/src src/upstream
+--- upstream/src
++++ src/upstream
+@@ -16,6 +16,9 @@
+ import { SerializedEncoding } from "../../utils/serialization"
+ import { AddDelegatorTx, AddValidatorTx } from "./validationtx"
+ import { CreateSubnetTx } from "./createsubnettx"
++import { AddSubnetValidatorTx } from "./addsubnetvalidatortx"
++import { CreateChainTx } from "./createchaintx"
++import { RegisterNameTx, UpdateNameTx } from "./nametxs"
+ import { TransactionError } from "../../utils/errors"
+ 
+ /**
+@@ -43,6 +46,16 @@
+     return new AddValidatorTx(...args)
+   } else if (txtype === PlatformVMConstants.CREATESUBNETTX) {
+     return new CreateSubnetTx(...args)
++  } else if (txtype === PlatformVMConstants.ADDSUBNETVALIDATORTX) {
++    // DIJETS: upstream could build but not parse these two (Arc creation uses both)
++    return new AddSubnetValidatorTx(...args)
++  } else if (txtype === PlatformVMConstants.CREATECHAINTX) {
++    return new CreateChainTx(...args)
++  } else if (txtype === PlatformVMConstants.REGISTERNAMETX) {
++    // DIJETS: name registry
++    return new RegisterNameTx(...args)
++  } else if (txtype === PlatformVMConstants.UPDATENAMETX) {
++    return new UpdateNameTx(...args)
+   }
+   /* istanbul ignore next */
+   throw new TransactionError("Error - SelectTxClass: unknown txtype")
+diff -ruN --label upstream/src --label src/upstream upstream/src src/upstream
+--- upstream/src
++++ src/upstream
+@@ -4,7 +4,6 @@
+  */
+ import { ClientRequestArgs } from "http"
+ import WebSocket from "isomorphic-ws"
+-import { MainnetAPI } from "../../utils"
+ export class Socket extends WebSocket {
+   // Fires once the connection has been established between the client and the server
+   onopen: any
+@@ -38,11 +37,12 @@
+   /**
+    * Provides the API for creating and managing a WebSocket connection to a server, as well as for sending and receiving data on the connection.
+    *
+-   * @param url Defaults to [[MainnetAPI]]
++   * @param url The node's V-Chain events endpoint, e.g. wss://host:9650/ext/bc/V/events.
++   *   DIJETS: required; upstream defaulted to Avalanche's public API host.
+    * @param options Optional
+    */
+   constructor(
+-    url: string | import("url").URL = `wss://${MainnetAPI}:443/ext/bc/X/events`,
++    url: string | import("url").URL,
+     options?: WebSocket.ClientOptions | ClientRequestArgs
+   ) {
+     super(url, options)
+diff -ruN --label upstream/src --label src/upstream upstream/src src/upstream
+--- upstream/src
++++ src/upstream
+@@ -152,8 +152,8 @@
+     if (!skipinit) {
+       this.addAPI("admin", AdminAPI)
+       this.addAPI("auth", AuthAPI)
+-      this.addAPI("xchain", AVMAPI, "/ext/bc/X", xchainid)
+-      this.addAPI("cchain", EVMAPI, "/ext/bc/C/avax", cchainid)
++      this.addAPI("xchain", AVMAPI, "/ext/bc/V", xchainid)
++      this.addAPI("cchain", EVMAPI, "/ext/bc/U/djtx", cchainid)
+       this.addAPI("health", HealthAPI)
+       this.addAPI("info", InfoAPI)
+       this.addAPI("index", IndexAPI)
+diff -ruN --label upstream/src --label src/upstream upstream/src src/upstream
+--- upstream/src
++++ src/upstream
+@@ -9,6 +9,7 @@
+ import { Base58 } from "./base58"
+ import { Bech32Error, ChecksumError, HexError } from "../utils/errors"
+ import { utils } from "ethers"
++import { HRP_TO_NETWORK_ID, FALLBACK_HRP } from "../../presets"
+ 
+ /**
+  * A class containing tools useful in interacting with binary data cross-platform using
+@@ -359,13 +360,9 @@
+       throw new Bech32Error("Error - HRP should be at least 1 character")
+     }
+ 
+-    if (
+-      humanReadablePart !== "avax" &&
+-      humanReadablePart !== "fuji" &&
+-      humanReadablePart != "local" &&
+-      humanReadablePart != "custom" &&
+-      humanReadablePart != hrp
+-    ) {
++    // DIJETS: accept the HRPs the node defines (and "custom"), not Avalanche's
++    // "avax"/"fuji"; an Avalanche address must never parse as a Dijets one.
++    if (!(humanReadablePart in HRP_TO_NETWORK_ID) && humanReadablePart !== FALLBACK_HRP && humanReadablePart !== hrp) {
+       throw new Bech32Error("Error - Invalid HRP")
+     }
+ 
+diff -ruN --label upstream/src --label src/upstream upstream/src src/upstream
+--- upstream/src
++++ src/upstream
+@@ -4,12 +4,27 @@
+  */
+ 
+ import BN from "bn.js"
++// DIJETS: everything from here to the merge rules is generated from
++// src/presets.ts, the single source of network constants. Upstream's
++// Avalanche tables (networks 0–5, 1337, 12345) are gone: Dijets reuses
++// network IDs 1, 5 and 12345 with different chains and assets. The internal
++// keys X, P and C are kept because upstream code indexes by them; their
++// aliases are the Dijets chain names V, M and U.
++import {
++  PRESETS,
++  NETWORK_ID_TO_HRP,
++  HRP_TO_NETWORK_ID,
++  FALLBACK_HRP,
++  M_CHAIN_ID,
++  DJT_SYMBOL,
++  isPlaceholder,
++  type NetworkPreset
++} from "../../presets"
+ 
+ export const PrivateKeyPrefix: string = "PrivateKey-"
+ export const NodeIDPrefix: string = "NodeID-"
+-export const PrimaryAssetAlias: string = "AVAX"
+-export const MainnetAPI: string = "api.avax.network"
+-export const FujiAPI: string = "api.avax-test.network"
++// DIJETS: the AVM genesis registers the native asset under the alias "DJT".
++export const PrimaryAssetAlias: string = DJT_SYMBOL
+ 
+ export interface C {
+   blockchainID: string
+@@ -66,71 +81,32 @@
+   [key: number]: Network
+ }
+ 
+-export const NetworkIDToHRP: object = {
+-  0: "custom",
+-  1: "avax",
+-  2: "cascade",
+-  3: "denali",
+-  4: "everest",
+-  5: "fuji",
+-  1337: "custom",
+-  12345: "local"
+-}
+-
+-export const HRPToNetworkID: object = {
+-  manhattan: 0,
+-  avax: 1,
+-  cascade: 2,
+-  denali: 3,
+-  everest: 4,
+-  fuji: 5,
+-  custom: 1337,
+-  local: 12345
+-}
++export const NetworkIDToHRP: object = { ...NETWORK_ID_TO_HRP }
++export const HRPToNetworkID: object = { ...HRP_TO_NETWORK_ID }
+ 
+-export const NetworkIDToNetworkNames: object = {
+-  0: ["Manhattan"],
+-  1: ["Avalanche", "Mainnet"],
+-  2: ["Cascade"],
+-  3: ["Denali"],
+-  4: ["Everest"],
+-  5: ["Fuji", "Testnet"],
+-  1337: ["Custom Network"],
+-  12345: ["Local Network"]
+-}
+-
+-export const NetworkNameToNetworkID: object = {
+-  Manhattan: 0,
+-  Avalanche: 1,
+-  Mainnet: 1,
+-  Cascade: 2,
+-  Denali: 3,
+-  Everest: 4,
+-  Fuji: 5,
+-  Testnet: 5,
+-  Custom: 1337,
+-  "Custom Network": 1337,
+-  Local: 12345,
+-  "Local Network": 12345
+-}
++export const NetworkIDToNetworkNames: object = Object.fromEntries(
++  PRESETS.map((p) => [p.networkID, [p.name]])
++)
++export const NetworkNameToNetworkID: object = Object.fromEntries(
++  PRESETS.map((p) => [p.name, p.networkID])
++)
+ 
+-export const FallbackHRP: string = "custom"
++export const FallbackHRP: string = FALLBACK_HRP
+ export const FallbackNetworkName: string = "Custom Network"
+ export const FallbackEVMChainID: number = 43112
+ 
+ export const DefaultNetworkID: number = 1
+ 
+-export const PlatformChainID: string = "11111111111111111111111111111111LpoYY"
+-export const PrimaryNetworkID: string = "11111111111111111111111111111111LpoYY"
+-export const XChainAlias: string = "X"
+-export const CChainAlias: string = "C"
+-export const PChainAlias: string = "P"
++export const PlatformChainID: string = M_CHAIN_ID
++export const PrimaryNetworkID: string = M_CHAIN_ID
++export const XChainAlias: string = "V"
++export const CChainAlias: string = "U"
++export const PChainAlias: string = "M"
+ export const XChainVMName: string = "avm"
+ export const CChainVMName: string = "evm"
+ export const PChainVMName: string = "platformvm"
+ 
+-// DO NOT use the following private keys and/or mnemonic on Fuji or Testnet
+-// This address/account is for testing on the local avash network
++// Funded only in the local network's genesis. Never use on a public network.
+ export const DefaultLocalGenesisPrivateKey: string =
+   "ewoqjP7PxY4yr3iLTpLisriqt94hdyDFNgchSxGGztUrTXtNN"
+ export const DefaultEVMLocalGenesisPrivateKey: string =
+@@ -140,6 +116,7 @@
+ export const mnemonic: string =
+   "output tooth keep tooth bracket fox city sustain blood raise install pond stem reject long scene clap gloom purpose mean music piece unknown light"
+ 
++// Upstream unit names are kept internally; the public API uses DJT units.
+ export const ONEAVAX: BN = new BN(1000000000)
+ 
+ export const DECIAVAX: BN = ONEAVAX.div(new BN(10))
+@@ -160,358 +137,77 @@
+ 
+ export const AVAXSTAKECAP: BN = ONEAVAX.mul(new BN(3000000))
+ 
+-// Start Manhattan
+-const n0X: X = {
+-  blockchainID: "2vrXWHgGxh5n3YsLHMV16YVVJTpT4z45Fmb4y3bL6si8kLCyg9",
+-  alias: XChainAlias,
+-  vm: XChainVMName,
+-  fee: MILLIAVAX,
+-  creationTxFee: CENTIAVAX,
+-  mintTxFee: MILLIAVAX
+-}
+-
+-const n0P: P = {
+-  blockchainID: PlatformChainID,
+-  alias: PChainAlias,
+-  vm: PChainVMName,
+-  fee: MILLIAVAX,
+-  creationTxFee: CENTIAVAX,
+-  createSubnetTx: ONEAVAX,
+-  createChainTx: ONEAVAX,
+-  minConsumption: 0.1,
+-  maxConsumption: 0.12,
+-  maxStakingDuration: new BN(31536000),
+-  maxSupply: new BN(720000000).mul(ONEAVAX),
+-  minStake: ONEAVAX.mul(new BN(2000)),
+-  minStakeDuration: 2 * 7 * 24 * 60 * 60, //two weeks
+-  maxStakeDuration: 365 * 24 * 60 * 60, // one year
+-  minDelegationStake: ONEAVAX.mul(new BN(25)),
+-  minDelegationFee: new BN(2)
+-}
+-
+-const n0C: C = {
+-  blockchainID: "2fFZQibQXcd6LTE4rpBPBAkLVXFE91Kit8pgxaBG1mRnh5xqbb",
+-  alias: CChainAlias,
+-  vm: CChainVMName,
+-  fee: MILLIAVAX,
+-  gasPrice: GWEI.mul(new BN(470)), //equivalent to gas price
+-  chainID: 43111
+-}
+-// End Manhattan
+-
+-// Start mainnet
+-let avaxAssetID: string = "FvwEAhmxKfeiG8SnEvq42hc6whRyY3EFYAvebMqDNDGCgxN5Z"
+-const n1X: X = {
+-  blockchainID: "2oYMBNV4eNHyqk2fjjV5nVQLDbtmNJzq5s3qs3Lo6ftnC6FByM",
+-  avaxAssetID: avaxAssetID,
+-  alias: XChainAlias,
+-  vm: XChainVMName,
+-  txFee: MILLIAVAX,
+-  creationTxFee: CENTIAVAX,
+-  mintTxFee: MILLIAVAX
+-}
+-
+-const n1P: P = {
+-  blockchainID: PlatformChainID,
+-  avaxAssetID: avaxAssetID,
+-  alias: PChainAlias,
+-  vm: PChainVMName,
+-  txFee: MILLIAVAX,
+-  createSubnetTx: ONEAVAX,
+-  createChainTx: ONEAVAX,
+-  creationTxFee: CENTIAVAX,
+-  minConsumption: 0.1,
+-  maxConsumption: 0.12,
+-  maxStakingDuration: new BN(31536000),
+-  maxSupply: new BN(720000000).mul(ONEAVAX),
+-  minStake: ONEAVAX.mul(new BN(2000)),
+-  minStakeDuration: 2 * 7 * 24 * 60 * 60, //two weeks
+-  maxStakeDuration: 365 * 24 * 60 * 60, // one year
+-  minDelegationStake: ONEAVAX.mul(new BN(25)),
+-  minDelegationFee: new BN(2)
+-}
+-
+-const n1C: C = {
+-  blockchainID: "2q9e4r6Mu3U68nU1fYjgbR6JvwrRx36CohpAX5UQxse55x1Q5",
+-  alias: CChainAlias,
+-  vm: CChainVMName,
+-  txBytesGas: 1,
+-  costPerSignature: 1000,
+-  // DEPRECATED - txFee
+-  // WILL BE REMOVED IN NEXT MAJOR VERSION BUMP
+-  txFee: MILLIAVAX,
+-  // DEPRECATED - gasPrice
+-  // WILL BE REMOVED IN NEXT MAJOR VERSION BUMP
+-  gasPrice: GWEI.mul(new BN(225)),
+-  minGasPrice: GWEI.mul(new BN(25)),
+-  maxGasPrice: GWEI.mul(new BN(1000)),
+-  chainID: 43114
+-}
+-// End Mainnet
+-
+-// Start Cascade
+-const n2X: X = {
+-  blockchainID: "4ktRjsAKxgMr2aEzv9SWmrU7Xk5FniHUrVCX4P1TZSfTLZWFM",
+-  alias: XChainAlias,
+-  vm: XChainVMName,
+-  txFee: 0,
+-  creationTxFee: 0,
+-  mintTxFee: new BN(0)
+-}
+-
+-const n2P: P = {
+-  blockchainID: PlatformChainID,
+-  alias: PChainAlias,
+-  vm: PChainVMName,
+-  txFee: 0,
+-  creationTxFee: 0,
+-  createSubnetTx: ONEAVAX,
+-  createChainTx: ONEAVAX,
+-  minConsumption: 0.1,
+-  maxConsumption: 0.12,
+-  maxStakingDuration: new BN(31536000),
+-  maxSupply: new BN(720000000).mul(ONEAVAX),
+-  minStake: ONEAVAX.mul(new BN(2000)),
+-  minStakeDuration: 2 * 7 * 24 * 60 * 60, //two weeks
+-  maxStakeDuration: 365 * 24 * 60 * 60, // one year
+-  minDelegationStake: ONEAVAX.mul(new BN(25)),
+-  minDelegationFee: new BN(2)
+-}
+-
+-const n2C: C = {
+-  blockchainID: "2mUYSXfLrDtigwbzj1LxKVsHwELghc5sisoXrzJwLqAAQHF4i",
+-  alias: CChainAlias,
+-  vm: CChainVMName,
+-  gasPrice: 0
+-}
+-// End Cascade
+-
+-// Start Denali
+-const n3X: X = {
+-  blockchainID: "rrEWX7gc7D9mwcdrdBxBTdqh1a7WDVsMuadhTZgyXfFcRz45L",
+-  alias: XChainAlias,
+-  vm: XChainVMName,
+-  txFee: 0,
+-  creationTxFee: 0,
+-  mintTxFee: new BN(0)
+-}
+-
+-const n3P: P = {
+-  blockchainID: "",
+-  alias: PChainAlias,
+-  vm: PChainVMName,
+-  txFee: 0,
+-  creationTxFee: 0,
+-  createSubnetTx: ONEAVAX,
+-  createChainTx: ONEAVAX,
+-  minConsumption: 0.1,
+-  maxConsumption: 0.12,
+-  maxStakingDuration: new BN(31536000),
+-  maxSupply: new BN(720000000).mul(ONEAVAX),
+-  minStake: ONEAVAX.mul(new BN(2000)),
+-  minStakeDuration: 2 * 7 * 24 * 60 * 60, //two weeks
+-  maxStakeDuration: 365 * 24 * 60 * 60, // one year
+-  minDelegationStake: ONEAVAX.mul(new BN(25)),
+-  minDelegationFee: new BN(2)
+-}
+-
+-const n3C: C = {
+-  blockchainID: "zJytnh96Pc8rM337bBrtMvJDbEdDNjcXG3WkTNCiLp18ergm9",
+-  alias: CChainAlias,
+-  vm: CChainVMName,
+-  gasPrice: 0
+-}
+-// End Denali
+-
+-// Start Everest
+-const n4X: X = {
+-  blockchainID: "jnUjZSRt16TcRnZzmh5aMhavwVHz3zBrSN8GfFMTQkzUnoBxC",
+-  alias: XChainAlias,
+-  vm: XChainVMName,
+-  txFee: MILLIAVAX,
+-  creationTxFee: CENTIAVAX,
+-  mintTxFee: MILLIAVAX
+-}
+-
+-const n4P: P = {
+-  blockchainID: PlatformChainID,
+-  alias: PChainAlias,
+-  vm: PChainVMName,
+-  txFee: MILLIAVAX,
+-  creationTxFee: CENTIAVAX,
+-  createSubnetTx: ONEAVAX,
+-  createChainTx: ONEAVAX,
+-  minConsumption: 0.1,
+-  maxConsumption: 0.12,
+-  maxStakingDuration: new BN(31536000),
+-  maxSupply: new BN(720000000).mul(ONEAVAX),
+-  minStake: ONEAVAX.mul(new BN(2000)),
+-  minStakeDuration: 2 * 7 * 24 * 60 * 60, //two weeks
+-  maxStakeDuration: 365 * 24 * 60 * 60, // one year
+-  minDelegationStake: ONEAVAX.mul(new BN(25)),
+-  minDelegationFee: new BN(2)
+-}
+-
+-const n4C: C = {
+-  blockchainID: "saMG5YgNsFxzjz4NMkEkt3bAH6hVxWdZkWcEnGB3Z15pcAmsK",
+-  alias: CChainAlias,
+-  vm: CChainVMName,
+-  gasPrice: GWEI.mul(new BN(470)),
+-  chainID: 43110
+-}
+-// End Everest
++const bn = (v: bigint | number): BN => new BN(v.toString())
++const known = (v: unknown): string => (isPlaceholder(v) ? "" : (v as string))
+ 
+-// Start Fuji
+-avaxAssetID = "U8iRqJoiJm8xZHAacmvYyZVwqQx6uDNtQeP3CQ6fcgQk3JqnK"
+-const n5X: X = {
+-  blockchainID: "2JVSBoinj9C2J33VntvzYtVJNZdN2NKiwwKjcumHUWEb5DbBrm",
+-  avaxAssetID: avaxAssetID,
+-  alias: XChainAlias,
+-  vm: XChainVMName,
+-  txFee: MILLIAVAX,
+-  creationTxFee: CENTIAVAX,
+-  mintTxFee: MILLIAVAX
+-}
+-
+-const n5P: P = {
+-  blockchainID: PlatformChainID,
+-  avaxAssetID: avaxAssetID,
+-  alias: PChainAlias,
+-  vm: PChainVMName,
+-  txFee: MILLIAVAX,
+-  creationTxFee: CENTIAVAX,
+-  createSubnetTx: ONEAVAX,
+-  createChainTx: ONEAVAX,
+-  minConsumption: 0.1,
+-  maxConsumption: 0.12,
+-  maxStakingDuration: new BN(31536000),
+-  maxSupply: new BN(720000000).mul(ONEAVAX),
+-  minStake: ONEAVAX,
+-  minStakeDuration: 24 * 60 * 60, //one day
+-  maxStakeDuration: 365 * 24 * 60 * 60, // one year
+-  minDelegationStake: ONEAVAX,
+-  minDelegationFee: new BN(2)
++/** Builds the upstream-shaped entry for a Dijets network. */
++export function toUpstreamNetwork(p: NetworkPreset): Network {
++  const djt = known(p.djtAssetID)
++  const x: X = {
++    blockchainID: known(p.chains.V.id),
++    alias: XChainAlias,
++    vm: XChainVMName,
++    txFee: bn(p.fees.txFee),
++    creationTxFee: bn(p.fees.createAssetTxFee),
++    mintTxFee: bn(p.fees.txFee),
++    avaxAssetID: djt
++  }
++  const pc: P = {
++    blockchainID: p.chains.M.id,
++    alias: PChainAlias,
++    vm: PChainVMName,
++    txFee: bn(p.fees.txFee),
++    creationTxFee: bn(p.fees.createAssetTxFee),
++    createSubnetTx: bn(p.fees.createSubnetTxFee),
++    createChainTx: bn(p.fees.createBlockchainTxFee),
++    minConsumption: p.staking.minConsumptionRate,
++    maxConsumption: p.staking.maxConsumptionRate,
++    maxStakingDuration: new BN(p.staking.maxStakeDuration),
++    maxSupply: bn(p.staking.supplyCap),
++    minStake: bn(p.staking.minValidatorStake),
++    minStakeDuration: p.staking.minStakeDuration,
++    maxStakeDuration: p.staking.maxStakeDuration,
++    minDelegationStake: bn(p.staking.minDelegatorStake),
++    // upstream expresses this in percent; the node in parts per million
++    minDelegationFee: new BN(p.staking.minDelegationFee / 10_000),
++    avaxAssetID: djt
++  }
++  const c: C = {
++    blockchainID: known(p.chains.U.id),
++    alias: CChainAlias,
++    vm: CChainVMName,
++    // coreth: AtomicTxBaseCost-era gas accounting, unchanged in Dijets
++    txBytesGas: 1,
++    costPerSignature: 1000,
++    txFee: MILLIAVAX,
++    // coreth params/dijets_params.go: Apricot phase 1 price and phase 4 base-fee bounds
++    gasPrice: GWEI.mul(new BN(225)),
++    minGasPrice: GWEI.mul(new BN(25)),
++    maxGasPrice: GWEI.mul(new BN(1000)),
++    chainID: isPlaceholder(p.chains.U.evmChainID) ? undefined : (p.chains.U.evmChainID as number),
++    avaxAssetID: djt
++  }
++  const n: Network = { hrp: p.hrp, X: x, P: pc, C: c }
++  if (x.blockchainID) n[x.blockchainID] = x
++  n[pc.blockchainID] = pc
++  if (c.blockchainID) n[c.blockchainID] = c
++  return n
+ }
+ 
+-const n5C: C = {
+-  blockchainID: "yH8D7ThNJkxmtkuv2jgBa4P1Rn3Qpr4pPr7QYNfcdoS6k6HWp",
+-  alias: CChainAlias,
+-  vm: CChainVMName,
+-  txBytesGas: 1,
+-  costPerSignature: 1000,
+-  // DEPRECATED - txFee
+-  // WILL BE REMOVED IN NEXT MAJOR VERSION BUMP
+-  txFee: MILLIAVAX,
+-  // DEPRECATED - gasPrice
+-  // WILL BE REMOVED IN NEXT MAJOR VERSION BUMP
+-  gasPrice: GWEI.mul(new BN(225)),
+-  minGasPrice: GWEI.mul(new BN(25)),
+-  maxGasPrice: GWEI.mul(new BN(1000)),
+-  chainID: 43113
++export class Defaults {
++  static network: Networks = Object.fromEntries(
++    PRESETS.map((p) => [p.networkID, toUpstreamNetwork(p)])
++  )
+ }
+-// End Fuji
+ 
+-// Start custom network
+-avaxAssetID = "BUuypiq2wyuLMvyhzFXcPyxPMCgSp7eeDohhQRqTChoBjKziC"
+-const n1337X: X = { ...n5X }
+-n1337X.blockchainID = "qzfF3A11KzpcHkkqznEyQgupQrCNS6WV6fTUTwZpEKqhj1QE7"
+-n1337X.avaxAssetID = avaxAssetID
+-const n1337P: P = { ...n5P }
+-n1337P.blockchainID = PlatformChainID
+-const n1337C: C = { ...n5C }
+-n1337C.blockchainID = "BR28ypgLATNS6PbtHMiJ7NQ61vfpT27Hj8tAcZ1AHsfU5cz88"
+-n1337C.avaxAssetID = avaxAssetID
+-n1337C.chainID = 43112
+-// End custom network
+-
+-// Start local network
+-avaxAssetID = "2fombhL7aGPwj3KH4bfrmJwW6PVnMobf9Y2fn9GwxiAAJyFDbe"
+-const n12345X: X = { ...n5X }
+-n12345X.blockchainID = "2eNy1mUFdmaxXNj1eQHUe7Np4gju9sJsEtWQ4MX3ToiNKuADed"
+-n12345X.avaxAssetID = avaxAssetID
+-const n12345P: P = { ...n5P }
+-n12345P.blockchainID = PlatformChainID
+-const n12345C: C = { ...n5C }
+-n12345C.blockchainID = "2CA6j5zYzasynPsFeNoqWkmTCt3VScMvXUZHbfDJ8k3oGzAPtU"
+-n12345C.avaxAssetID = avaxAssetID
+-n12345C.chainID = 43112
+-// End local network
+-
+-export class Defaults {
+-  static network: Networks = {
+-    0: {
+-      hrp: NetworkIDToHRP[0],
+-      X: n0X,
+-      "2vrXWHgGxh5n3YsLHMV16YVVJTpT4z45Fmb4y3bL6si8kLCyg9": n0X,
+-      P: n0P,
+-      "11111111111111111111111111111111LpoYY": n0P,
+-      C: n0C,
+-      "2fFZQibQXcd6LTE4rpBPBAkLVXFE91Kit8pgxaBG1mRnh5xqbb": n0C
+-    },
+-    1: {
+-      hrp: NetworkIDToHRP[1],
+-      X: n1X,
+-      "2oYMBNV4eNHyqk2fjjV5nVQLDbtmNJzq5s3qs3Lo6ftnC6FByM": n1X,
+-      P: n1P,
+-      "11111111111111111111111111111111LpoYY": n1P,
+-      C: n1C,
+-      "2q9e4r6Mu3U68nU1fYjgbR6JvwrRx36CohpAX5UQxse55x1Q5": n1C
+-    },
+-    2: {
+-      hrp: NetworkIDToHRP[2],
+-      X: n2X,
+-      "4ktRjsAKxgMr2aEzv9SWmrU7Xk5FniHUrVCX4P1TZSfTLZWFM": n2X,
+-      P: n2P,
+-      "11111111111111111111111111111111LpoYY": n2P,
+-      C: n2C,
+-      "2mUYSXfLrDtigwbzj1LxKVsHwELghc5sisoXrzJwLqAAQHF4i": n2C
+-    },
+-    3: {
+-      hrp: NetworkIDToHRP[3],
+-      X: n3X,
+-      rrEWX7gc7D9mwcdrdBxBTdqh1a7WDVsMuadhTZgyXfFcRz45L: n3X,
+-      P: n3P,
+-      "11111111111111111111111111111111LpoYY": n3P,
+-      C: n3C,
+-      zJytnh96Pc8rM337bBrtMvJDbEdDNjcXG3WkTNCiLp18ergm9: n3C
+-    },
+-    4: {
+-      hrp: NetworkIDToHRP[4],
+-      X: n4X,
+-      jnUjZSRt16TcRnZzmh5aMhavwVHz3zBrSN8GfFMTQkzUnoBxC: n4X,
+-      P: n4P,
+-      "11111111111111111111111111111111LpoYY": n4P,
+-      C: n4C,
+-      saMG5YgNsFxzjz4NMkEkt3bAH6hVxWdZkWcEnGB3Z15pcAmsK: n4C
+-    },
+-    5: {
+-      hrp: NetworkIDToHRP[5],
+-      X: n5X,
+-      "2JVSBoinj9C2J33VntvzYtVJNZdN2NKiwwKjcumHUWEb5DbBrm": n5X,
+-      P: n5P,
+-      "11111111111111111111111111111111LpoYY": n5P,
+-      C: n5C,
+-      yH8D7ThNJkxmtkuv2jgBa4P1Rn3Qpr4pPr7QYNfcdoS6k6HWp: n5C
+-    },
+-    1337: {
+-      hrp: NetworkIDToHRP[1337],
+-      X: n1337X,
+-      qzfF3A11KzpcHkkqznEyQgupQrCNS6WV6fTUTwZpEKqhj1QE7: n1337X,
+-      P: n1337P,
+-      "11111111111111111111111111111111LpoYY": n1337P,
+-      C: n1337C,
+-      BR28ypgLATNS6PbtHMiJ7NQ61vfpT27Hj8tAcZ1AHsfU5cz88: n1337C
+-    },
+-    12345: {
+-      hrp: NetworkIDToHRP[12345],
+-      X: n12345X,
+-      "2eNy1mUFdmaxXNj1eQHUe7Np4gju9sJsEtWQ4MX3ToiNKuADed": n12345X,
+-      P: n12345P,
+-      "11111111111111111111111111111111LpoYY": n12345P,
+-      C: n12345C,
+-      "2CA6j5zYzasynPsFeNoqWkmTCt3VScMvXUZHbfDJ8k3oGzAPtU": n12345C
+-    }
+-  }
++/**
++ * Installs (or replaces) the entry for one network. The Dijets client calls
++ * this after confirming chain and asset IDs with the node, so that upstream
++ * code which reads `Defaults.network` directly sees the network it is
++ * actually talking to.
++ */
++export function registerNetwork(networkID: number, network: Network): void {
++  Defaults.network[networkID] = network
+ }
+ 
+ /**
+diff -ruN --label upstream/src --label src/upstream upstream/src src/upstream
+--- upstream/src
++++ src/upstream
+@@ -89,10 +89,13 @@
+ 
+   const promiseChain = [getResponse(request, config)]
+ 
++  // DIJETS: keep the timer so it can be cleared; upstream left it running,
++  // which held Node processes open for the full timeout after every request.
++  let timer: ReturnType<typeof setTimeout> | undefined
+   if (config.timeout && config.timeout > 0) {
+     promiseChain.push(
+       new Promise((res, reject) => {
+-        setTimeout(() => {
++        timer = setTimeout(() => {
+           const message = config.timeoutErrorMessage
+             ? config.timeoutErrorMessage
+             : "timeout of " + config.timeout + "ms exceeded"
+@@ -110,7 +113,9 @@
+     )
+   }
+ 
+-  const response = await Promise.race(promiseChain)
++  const response = await Promise.race(promiseChain).finally(() => {
++    if (timer !== undefined) clearTimeout(timer)
++  })
+   return new Promise((resolve, reject) => {
+     if (response instanceof Error) {
+       reject(response)
+diff -ruN --label upstream/src --label src/upstream upstream/src src/upstream
+--- upstream/src
++++ src/upstream
+@@ -468,7 +468,7 @@
+  */
+ export class XCHAINADDRPayload extends ChainAddressPayload {
+   protected typeid = 6
+-  protected chainid = "X"
++  protected chainid = "V" // DIJETS: V-Chain
+ }
+ 
+ /**
+@@ -476,7 +476,7 @@
+  */
+ export class PCHAINADDRPayload extends ChainAddressPayload {
+   protected typeid = 7
+-  protected chainid = "P"
++  protected chainid = "M" // DIJETS: M-Chain
+ }
+ 
+ /**
+@@ -484,7 +484,7 @@
+  */
+ export class CCHAINADDRPayload extends ChainAddressPayload {
+   protected typeid = 8
+-  protected chainid = "C"
++  protected chainid = "U" // DIJETS: U-Chain
+ }
+ 
+ /**
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/__mocks__/axios.ts test/upstream/__mocks__/axios.ts
+--- upstream/tests/__mocks__/axios.ts	1970-01-01 01:00:00.000000000 +0100
++++ test/upstream/__mocks__/axios.ts	2026-10-25 04:50:27.000000000 +0000
+@@ -0,0 +1,4 @@
++// ./__mocks__/axios.js
++import mockAxios from "jest-mock-axios"
++
++export default mockAxios
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/apis/admin/api.test.ts test/upstream/apis/admin/api.test.ts
+--- upstream/tests/apis/admin/api.test.ts	2022-05-24 21:35:33.000000000 +0100
++++ test/upstream/apis/admin/api.test.ts	2026-10-25 04:52:01.000000000 +0000
+@@ -1,12 +1,12 @@
+ import mockAxios from "jest-mock-axios"
+ import { HttpResponse } from "jest-mock-axios/dist/lib/mock-axios-types"
+-import { Avalanche } from "src"
++import { Avalanche } from "../../../../src/upstream"
+ import {
+   GetLoggerLevelResponse,
+   LoadVMsResponse,
+   SetLoggerLevelResponse
+-} from "src/apis/admin/interfaces"
+-import { AdminAPI } from "../../../src/apis/admin/api"
++} from "../../../../src/upstream/apis/admin/interfaces"
++import { AdminAPI } from "../../../../src/upstream/apis/admin/api"
+ 
+ describe("Admin", (): void => {
+   const ip: string = "127.0.0.1"
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/apis/auth/api.test.ts test/upstream/apis/auth/api.test.ts
+--- upstream/tests/apis/auth/api.test.ts	2022-04-19 20:46:27.000000000 +0100
++++ test/upstream/apis/auth/api.test.ts	2026-10-25 04:52:01.000000000 +0000
+@@ -1,8 +1,8 @@
+ import mockAxios from "jest-mock-axios"
+ import { HttpResponse } from "jest-mock-axios/dist/lib/mock-axios-types"
+-import { Avalanche } from "src"
+-import { AuthAPI } from "../../../src/apis/auth/api"
+-import { ErrorResponseObject } from "../../../src/utils/errors"
++import { Avalanche } from "../../../../src/upstream"
++import { AuthAPI } from "../../../../src/upstream/apis/auth/api"
++import { ErrorResponseObject } from "../../../../src/upstream/utils/errors"
+ 
+ describe("Auth", (): void => {
+   const ip: string = "127.0.0.1"
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/apis/avm/api.test.ts test/upstream/apis/avm/api.test.ts
+--- upstream/tests/apis/avm/api.test.ts	2022-05-24 21:35:33.000000000 +0100
++++ test/upstream/apis/avm/api.test.ts	2026-10-25 05:19:17.000000000 +0000
+@@ -1,54 +1,54 @@
+ import mockAxios from "jest-mock-axios"
+-import { Avalanche } from "src"
+-import { AVMAPI } from "../../../src/apis/avm/api"
+-import { KeyPair, KeyChain } from "../../../src/apis/avm/keychain"
++import { Avalanche } from "../../../../src/upstream"
++import { AVMAPI } from "../../../../src/upstream/apis/avm/api"
++import { KeyPair, KeyChain } from "../../../../src/upstream/apis/avm/keychain"
+ import { Buffer } from "buffer/"
+ import BN from "bn.js"
+-import BinTools from "../../../src/utils/bintools"
+-import { UTXOSet, UTXO } from "../../../src/apis/avm/utxos"
++import BinTools from "../../../../src/upstream/utils/bintools"
++import { UTXOSet, UTXO } from "../../../../src/upstream/apis/avm/utxos"
+ import {
+   TransferableInput,
+   SECPTransferInput
+-} from "../../../src/apis/avm/inputs"
++} from "../../../../src/upstream/apis/avm/inputs"
+ import createHash from "create-hash"
+-import { UnsignedTx, Tx } from "../../../src/apis/avm/tx"
+-import { AVMConstants } from "../../../src/apis/avm/constants"
++import { UnsignedTx, Tx } from "../../../../src/upstream/apis/avm/tx"
++import { AVMConstants } from "../../../../src/upstream/apis/avm/constants"
+ import {
+   TransferableOutput,
+   SECPTransferOutput,
+   NFTMintOutput,
+   NFTTransferOutput,
+   SECPMintOutput
+-} from "../../../src/apis/avm/outputs"
++} from "../../../../src/upstream/apis/avm/outputs"
+ import {
+   NFTTransferOperation,
+   TransferableOperation,
+   SECPMintOperation
+-} from "../../../src/apis/avm/ops"
++} from "../../../../src/upstream/apis/avm/ops"
+ import * as bech32 from "bech32"
+-import { UTF8Payload } from "../../../src/utils/payload"
+-import { InitialStates } from "../../../src/apis/avm/initialstates"
+-import { Defaults } from "../../../src/utils/constants"
+-import { UnixNow } from "../../../src/utils/helperfunctions"
+-import { OutputOwners } from "../../../src/common/output"
+-import { MinterSet } from "../../../src/apis/avm/minterset"
+-import { PlatformChainID } from "../../../src/utils/constants"
+-import { PersistanceOptions } from "../../../src/utils/persistenceoptions"
+-import { ONEAVAX } from "../../../src/utils/constants"
++import { UTF8Payload } from "../../../../src/upstream/utils/payload"
++import { InitialStates } from "../../../../src/upstream/apis/avm/initialstates"
++import { Defaults } from "../../../../src/upstream/utils/constants"
++import { UnixNow } from "../../../../src/upstream/utils/helperfunctions"
++import { OutputOwners } from "../../../../src/upstream/common/output"
++import { MinterSet } from "../../../../src/upstream/apis/avm/minterset"
++import { PlatformChainID } from "../../../../src/upstream/utils/constants"
++import { PersistanceOptions } from "../../../../src/upstream/utils/persistenceoptions"
++import { ONEAVAX } from "../../../../src/upstream/utils/constants"
+ import {
+   Serializable,
+   Serialization,
+   SerializedEncoding,
+   SerializedType
+-} from "../../../src/utils/serialization"
++} from "../../../../src/upstream/utils/serialization"
+ import { HttpResponse } from "jest-mock-axios/dist/lib/mock-axios-types"
+ import {
+   GetBalanceResponse,
+   SendMultipleResponse,
+   SendResponse
+-} from "src/apis/avm/interfaces"
+-import { CENTIAVAX } from "src/utils"
+-import { MILLIAVAX } from "src/utils"
++} from "../../../../src/upstream/apis/avm/interfaces"
++import { CENTIAVAX } from "../../../../src/upstream/utils"
++import { MILLIAVAX } from "../../../../src/upstream/utils"
+ 
+ /**
+  * @ignore
+@@ -101,19 +101,19 @@
+   let api: AVMAPI
+   let alias: string
+ 
+-  const addrA: string = `X-${bech32.bech32.encode(
++  const addrA: string = `V-${bech32.bech32.encode(
+     avalanche.getHRP(),
+     bech32.bech32.toWords(
+       bintools.cb58Decode("B6D4v1VtPYLbiUvYXtW4Px8oE9imC2vGW")
+     )
+   )}`
+-  const addrB: string = `X-${bech32.bech32.encode(
++  const addrB: string = `V-${bech32.bech32.encode(
+     avalanche.getHRP(),
+     bech32.bech32.toWords(
+       bintools.cb58Decode("P5wdRuZeaDt28eHMP5S3w9ZdoBfo7wuzF")
+     )
+   )}`
+-  const addrC: string = `X-${bech32.bech32.encode(
++  const addrC: string = `V-${bech32.bech32.encode(
+     avalanche.getHRP(),
+     bech32.bech32.toWords(
+       bintools.cb58Decode("6Y3kysjF9jnHnYkdS9yGAuoHyae2eNmeV")
+@@ -200,7 +200,7 @@
+   test("can Send 1", async (): Promise<void> => {
+     const txId: string = "asdfhvl234"
+     const memo: string = "hello world"
+-    const changeAddr: string = "X-local1"
++    const changeAddr: string = "V-local1"
+     const result: Promise<SendResponse> = api.send(
+       username,
+       password,
+@@ -232,7 +232,7 @@
+   test("can Send 2", async (): Promise<void> => {
+     const txId: string = "asdfhvl234"
+     const memo: Buffer = Buffer.from("hello world")
+-    const changeAddr: string = "X-local1"
++    const changeAddr: string = "V-local1"
+     const result: Promise<SendResponse> = api.send(
+       username,
+       password,
+@@ -264,7 +264,7 @@
+   test("can Send Multiple", async (): Promise<void> => {
+     const txId: string = "asdfhvl234"
+     const memo: string = "hello world"
+-    const changeAddr: string = "X-local1"
++    const changeAddr: string = "V-local1"
+     const result: Promise<SendMultipleResponse> = api.sendMultiple(
+       username,
+       password,
+@@ -292,7 +292,8 @@
+   })
+ 
+   test("refreshBlockchainID", async (): Promise<void> => {
+-    const n3bcID: string = Defaults.network[3].X["blockchainID"]
++    // DIJETS: network 3 (Avalanche Denali) does not exist on Dijets; use Lothar (5).
++    const n3bcID: string = Defaults.network[5].X["blockchainID"]
+     const n1337bcID: string = Defaults.network[1337].X["blockchainID"]
+     const testAPI: AVMAPI = new AVMAPI(avalanche, "/ext/bc/avm", n3bcID)
+     const bc1: string = testAPI.getBlockchainID()
+@@ -410,8 +411,10 @@
+     mockAxios.mockResponse(responseObj)
+     const response: object = await result
+     const calledWith: object = {
++      // DIJETS: Node 18+ has a global fetch, so the library attaches its fetch adapter.
++      adapter: typeof fetch !== "undefined" ? expect.any(Function) : undefined,
+       baseURL: "https://127.0.0.1:9650",
+-      data: '{"id":9,"method":"avm.getBalance","params":{"address":"X-custom1d6kkj0qh4wcmus3tk59npwt3rluc6en755a58g","assetID":"ATH","includePartial":true},"jsonrpc":"2.0"}',
++      data: '{"id":9,"method":"avm.getBalance","params":{"address":"V-custom1d6kkj0qh4wcmus3tk59npwt3rluc6en755a58g","assetID":"ATH","includePartial":true},"jsonrpc":"2.0"}',
+       headers: {
+         "Content-Type": "application/json;charset=UTF-8"
+       },
+@@ -1466,7 +1469,7 @@
+         symbol,
+         denomination,
+         undefined,
+-        CENTIAVAX,
++        new BN(fee), // DIJETS: the fee set above; upstream passed CENTIAVAX and only matched because the builder ignored setCreationTxFee()
+         assetID
+       )
+ 
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/apis/avm/genesisasset.test.ts test/upstream/apis/avm/genesisasset.test.ts
+--- upstream/tests/apis/avm/genesisasset.test.ts	2021-11-09 18:20:49.000000000 +0000
++++ test/upstream/apis/avm/genesisasset.test.ts	2026-10-25 04:50:41.000000000 +0000
+@@ -3,15 +3,15 @@
+ import {
+   SECPTransferOutput,
+   TransferableOutput
+-} from "../../../src/apis/avm/outputs"
+-import { InitialStates } from "../../../src/apis/avm/initialstates"
+-import { GenesisAsset, TransferableInput } from "../../../src/apis/avm"
++} from "../../../../src/upstream/apis/avm/outputs"
++import { InitialStates } from "../../../../src/upstream/apis/avm/initialstates"
++import { GenesisAsset, TransferableInput } from "../../../../src/upstream/apis/avm"
+ import {
+   DefaultNetworkID,
+   Serialization,
+   SerializedEncoding,
+   SerializedType
+-} from "../../../src/utils"
++} from "../../../../src/upstream/utils"
+ 
+ /**
+  * @ignore
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/apis/avm/genesisdata.test.ts test/upstream/apis/avm/genesisdata.test.ts
+--- upstream/tests/apis/avm/genesisdata.test.ts	2022-05-24 21:35:33.000000000 +0100
++++ test/upstream/apis/avm/genesisdata.test.ts	2026-10-25 04:50:41.000000000 +0000
+@@ -1,9 +1,9 @@
+ import BN from "bn.js"
+ import { Buffer } from "buffer/"
+-import { SECPTransferOutput } from "../../../src/apis/avm/outputs"
+-import { InitialStates } from "../../../src/apis/avm/initialstates"
+-import { GenesisData, GenesisAsset, AVMConstants } from "../../../src/apis/avm"
+-import { Serialization, SerializedType } from "../../../src/utils"
++import { SECPTransferOutput } from "../../../../src/upstream/apis/avm/outputs"
++import { InitialStates } from "../../../../src/upstream/apis/avm/initialstates"
++import { GenesisData, GenesisAsset, AVMConstants } from "../../../../src/upstream/apis/avm"
++import { Serialization, SerializedType } from "../../../../src/upstream/utils"
+ 
+ /**
+  * @ignore
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/apis/avm/inputs.test.ts test/upstream/apis/avm/inputs.test.ts
+--- upstream/tests/apis/avm/inputs.test.ts	2022-05-23 19:46:27.000000000 +0100
++++ test/upstream/apis/avm/inputs.test.ts	2026-10-25 04:50:41.000000000 +0000
+@@ -1,21 +1,21 @@
+-import { UTXOSet, UTXO } from "../../../src/apis/avm/utxos"
+-import { KeyChain } from "../../../src/apis/avm/keychain"
++import { UTXOSet, UTXO } from "../../../../src/upstream/apis/avm/utxos"
++import { KeyChain } from "../../../../src/upstream/apis/avm/keychain"
+ import {
+   SECPTransferInput,
+   TransferableInput
+-} from "../../../src/apis/avm/inputs"
++} from "../../../../src/upstream/apis/avm/inputs"
+ import createHash from "create-hash"
+-import BinTools from "../../../src/utils/bintools"
++import BinTools from "../../../../src/upstream/utils/bintools"
+ import BN from "bn.js"
+ import { Buffer } from "buffer/"
+ import {
+   SECPTransferOutput,
+   AmountOutput,
+   TransferableOutput
+-} from "../../../src/apis/avm/outputs"
+-import { AVMConstants } from "../../../src/apis/avm/constants"
+-import { Input } from "../../../src/common/input"
+-import { Output } from "../../../src/common/output"
++} from "../../../../src/upstream/apis/avm/outputs"
++import { AVMConstants } from "../../../../src/upstream/apis/avm/constants"
++import { Input } from "../../../../src/upstream/common/input"
++import { Output } from "../../../../src/upstream/common/output"
+ 
+ /**
+  * @ignore
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/apis/avm/keychain.test.ts test/upstream/apis/avm/keychain.test.ts
+--- upstream/tests/apis/avm/keychain.test.ts	2022-05-24 21:35:33.000000000 +0100
++++ test/upstream/apis/avm/keychain.test.ts	2026-10-25 05:13:31.000000000 +0000
+@@ -1,8 +1,8 @@
+-import { KeyChain, KeyPair } from "../../../src/apis/avm/keychain"
+-import { Avalanche } from "../../../src/index"
++import { KeyChain, KeyPair } from "../../../../src/upstream/apis/avm/keychain"
++import { Avalanche } from "../../../../src/upstream/index"
+ import { Buffer } from "buffer/"
+ import createHash from "create-hash"
+-import BinTools from "../../../src/utils/bintools"
++import BinTools from "../../../../src/upstream/utils/bintools"
+ 
+ const bintools: BinTools = BinTools.getInstance()
+ const alias: string = "X"
+@@ -34,19 +34,19 @@
+     avalanche.setNetworkID(2)
+     hrp = avalanche.getHRP()
+     networkID = avalanche.getNetworkID()
+-    expect(hrp).toBe("cascade")
++    expect(hrp).toBe("custom")
+     expect(networkID).toBe(2)
+ 
+     avalanche.setNetworkID(3)
+     hrp = avalanche.getHRP()
+     networkID = avalanche.getNetworkID()
+-    expect(hrp).toBe("denali")
++    expect(hrp).toBe("custom")
+     expect(networkID).toBe(3)
+ 
+     avalanche.setNetworkID(4)
+     hrp = avalanche.getHRP()
+     networkID = avalanche.getNetworkID()
+-    expect(hrp).toBe("everest")
++    expect(hrp).toBe("custom")
+     expect(networkID).toBe(4)
+ 
+     avalanche.setNetworkID(0)
+@@ -58,9 +58,33 @@
+     avalanche.setNetworkID(1)
+     hrp = avalanche.getHRP()
+     networkID = avalanche.getNetworkID()
+-    expect(hrp).toBe("avax")
++    expect(hrp).toBe("dijets")
+     expect(networkID).toBe(1)
+ 
++    // DIJETS: Dijets HRPs (dijetsnodesgo utils/constants/network_ids.go); 2-4 are not Dijets networks.
++
++    avalanche.setNetworkID(5)
++
++    hrp = avalanche.getHRP()
++
++    networkID = avalanche.getNetworkID()
++
++    expect(hrp).toBe("lothar")
++
++    expect(networkID).toBe(5)
++
++
++    avalanche.setNetworkID(10)
++
++    hrp = avalanche.getHRP()
++
++    networkID = avalanche.getNetworkID()
++
++    expect(hrp).toBe("testing")
++
++    expect(networkID).toBe(10)
++
++
+     avalanche.setNetworkID(12345)
+     hrp = avalanche.getHRP()
+     networkID = avalanche.getNetworkID()
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/apis/avm/ops.test.ts test/upstream/apis/avm/ops.test.ts
+--- upstream/tests/apis/avm/ops.test.ts	2021-11-09 18:20:49.000000000 +0000
++++ test/upstream/apis/avm/ops.test.ts	2026-10-25 04:50:41.000000000 +0000
+@@ -1,20 +1,20 @@
+-import { UTXO } from "../../../src/apis/avm/utxos"
++import { UTXO } from "../../../../src/upstream/apis/avm/utxos"
+ import createHash from "create-hash"
+-import BinTools from "../../../src/utils/bintools"
++import BinTools from "../../../../src/upstream/utils/bintools"
+ import BN from "bn.js"
+ import { Buffer } from "buffer/"
+-import { NFTTransferOutput } from "../../../src/apis/avm/outputs"
+-import { AVMConstants } from "../../../src/apis/avm/constants"
++import { NFTTransferOutput } from "../../../../src/upstream/apis/avm/outputs"
++import { AVMConstants } from "../../../../src/upstream/apis/avm/constants"
+ import {
+   SelectOperationClass,
+   Operation,
+   TransferableOperation,
+   NFTTransferOperation,
+   NFTMintOperation
+-} from "../../../src/apis/avm/ops"
+-import { OutputOwners } from "../../../src/common/output"
+-import { SigIdx } from "../../../src/common/credentials"
+-import { UTXOID } from "../../../src/apis/avm/ops"
++} from "../../../../src/upstream/apis/avm/ops"
++import { OutputOwners } from "../../../../src/upstream/common/output"
++import { SigIdx } from "../../../../src/upstream/common/credentials"
++import { UTXOID } from "../../../../src/upstream/apis/avm/ops"
+ 
+ /**
+  * @ignore
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/apis/avm/outputs.test.ts test/upstream/apis/avm/outputs.test.ts
+--- upstream/tests/apis/avm/outputs.test.ts	2021-11-09 18:20:49.000000000 +0000
++++ test/upstream/apis/avm/outputs.test.ts	2026-10-25 04:50:41.000000000 +0000
+@@ -1,14 +1,14 @@
+ import BN from "bn.js"
+ import { Buffer } from "buffer/"
+-import BinTools from "../../../src/utils/bintools"
++import BinTools from "../../../../src/upstream/utils/bintools"
+ import {
+   SECPTransferOutput,
+   SelectOutputClass,
+   NFTMintOutput
+-} from "../../../src/apis/avm/outputs"
+-import { Output } from "../../../src/common/output"
+-import { SECPMintOutput } from "../../../src/apis/avm/outputs"
+-import { AVMConstants } from "../../../src/apis/avm"
++} from "../../../../src/upstream/apis/avm/outputs"
++import { Output } from "../../../../src/upstream/common/output"
++import { SECPMintOutput } from "../../../../src/upstream/apis/avm/outputs"
++import { AVMConstants } from "../../../../src/upstream/apis/avm"
+ 
+ const bintools: BinTools = BinTools.getInstance()
+ 
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/apis/avm/tx.test.ts test/upstream/apis/avm/tx.test.ts
+--- upstream/tests/apis/avm/tx.test.ts	2022-05-24 21:35:33.000000000 +0100
++++ test/upstream/apis/avm/tx.test.ts	2026-10-25 04:50:41.000000000 +0000
+@@ -1,38 +1,38 @@
+ import mockAxios from "jest-mock-axios"
+-import { UTXOSet, UTXO } from "../../../src/apis/avm/utxos"
+-import { AVMAPI } from "../../../src/apis/avm/api"
+-import { UnsignedTx, Tx } from "../../../src/apis/avm/tx"
+-import { KeyChain } from "../../../src/apis/avm/keychain"
++import { UTXOSet, UTXO } from "../../../../src/upstream/apis/avm/utxos"
++import { AVMAPI } from "../../../../src/upstream/apis/avm/api"
++import { UnsignedTx, Tx } from "../../../../src/upstream/apis/avm/tx"
++import { KeyChain } from "../../../../src/upstream/apis/avm/keychain"
+ import {
+   SECPTransferInput,
+   TransferableInput
+-} from "../../../src/apis/avm/inputs"
++} from "../../../../src/upstream/apis/avm/inputs"
+ import createHash from "create-hash"
+-import BinTools from "../../../src/utils/bintools"
++import BinTools from "../../../../src/upstream/utils/bintools"
+ import BN from "bn.js"
+ import { Buffer } from "buffer/"
+ import {
+   SECPTransferOutput,
+   NFTTransferOutput,
+   TransferableOutput
+-} from "../../../src/apis/avm/outputs"
+-import { AVMConstants } from "../../../src/apis/avm/constants"
++} from "../../../../src/upstream/apis/avm/outputs"
++import { AVMConstants } from "../../../../src/upstream/apis/avm/constants"
+ import {
+   TransferableOperation,
+   NFTTransferOperation
+-} from "../../../src/apis/avm/ops"
+-import { Avalanche } from "../../../src/index"
+-import { UTF8Payload } from "../../../src/utils/payload"
+-import { InitialStates } from "../../../src/apis/avm/initialstates"
+-import { UnixNow } from "../../../src/utils/helperfunctions"
+-import { BaseTx } from "../../../src/apis/avm/basetx"
+-import { CreateAssetTx } from "../../../src/apis/avm/createassettx"
+-import { OperationTx } from "../../../src/apis/avm/operationtx"
+-import { ImportTx } from "../../../src/apis/avm/importtx"
+-import { ExportTx } from "../../../src/apis/avm/exporttx"
+-import { PlatformChainID } from "../../../src/utils/constants"
+-import { Defaults } from "../../../src/utils/constants"
+-import { ONEAVAX } from "../../../src/utils/constants"
++} from "../../../../src/upstream/apis/avm/ops"
++import { Avalanche } from "../../../../src/upstream/index"
++import { UTF8Payload } from "../../../../src/upstream/utils/payload"
++import { InitialStates } from "../../../../src/upstream/apis/avm/initialstates"
++import { UnixNow } from "../../../../src/upstream/utils/helperfunctions"
++import { BaseTx } from "../../../../src/upstream/apis/avm/basetx"
++import { CreateAssetTx } from "../../../../src/upstream/apis/avm/createassettx"
++import { OperationTx } from "../../../../src/upstream/apis/avm/operationtx"
++import { ImportTx } from "../../../../src/upstream/apis/avm/importtx"
++import { ExportTx } from "../../../../src/upstream/apis/avm/exporttx"
++import { PlatformChainID } from "../../../../src/upstream/utils/constants"
++import { Defaults } from "../../../../src/upstream/utils/constants"
++import { ONEAVAX } from "../../../../src/upstream/utils/constants"
+ import { HttpResponse } from "jest-mock-axios/dist/lib/mock-axios-types"
+ 
+ /**
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/apis/avm/types.test.ts test/upstream/apis/avm/types.test.ts
+--- upstream/tests/apis/avm/types.test.ts	2021-11-09 18:20:49.000000000 +0000
++++ test/upstream/apis/avm/types.test.ts	2026-10-25 04:50:41.000000000 +0000
+@@ -1,8 +1,8 @@
+ import { Buffer } from "buffer/"
+-import BinTools from "../../../src/utils/bintools"
+-import { SigIdx, Signature } from "../../../src/common/credentials"
+-import { Address } from "../../../src/common/output"
+-import { UnixNow } from "../../../src/utils/helperfunctions"
++import BinTools from "../../../../src/upstream/utils/bintools"
++import { SigIdx, Signature } from "../../../../src/upstream/common/credentials"
++import { Address } from "../../../../src/upstream/common/output"
++import { UnixNow } from "../../../../src/upstream/utils/helperfunctions"
+ import BN from "bn.js"
+ 
+ const bintools: BinTools = BinTools.getInstance()
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/apis/avm/utxos.test.ts test/upstream/apis/avm/utxos.test.ts
+--- upstream/tests/apis/avm/utxos.test.ts	2021-11-09 18:20:49.000000000 +0000
++++ test/upstream/apis/avm/utxos.test.ts	2026-10-25 04:50:41.000000000 +0000
+@@ -1,10 +1,10 @@
+ import BN from "bn.js"
+ import { Buffer } from "buffer/"
+-import BinTools from "../../../src/utils/bintools"
+-import { UTXO, UTXOSet } from "../../../src/apis/avm/utxos"
+-import { AmountOutput } from "../../../src/apis/avm/outputs"
+-import { UnixNow } from "../../../src/utils/helperfunctions"
+-import { SerializedEncoding } from "../../../src/utils"
++import BinTools from "../../../../src/upstream/utils/bintools"
++import { UTXO, UTXOSet } from "../../../../src/upstream/apis/avm/utxos"
++import { AmountOutput } from "../../../../src/upstream/apis/avm/outputs"
++import { UnixNow } from "../../../../src/upstream/utils/helperfunctions"
++import { SerializedEncoding } from "../../../../src/upstream/utils"
+ 
+ const bintools: BinTools = BinTools.getInstance()
+ const display: SerializedEncoding = "display"
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/apis/avm/vertex.test.ts test/upstream/apis/avm/vertex.test.ts
+--- upstream/tests/apis/avm/vertex.test.ts	2022-06-13 20:11:51.000000000 +0100
++++ test/upstream/apis/avm/vertex.test.ts	2026-10-25 04:52:01.000000000 +0000
+@@ -1,7 +1,7 @@
+-import BinTools from "../../../src/utils/bintools"
++import BinTools from "../../../../src/upstream/utils/bintools"
+ import BN from "bn.js"
+ import { Buffer } from "buffer/"
+-import { Vertex, Tx } from "src/apis/avm"
++import { Vertex, Tx } from "../../../../src/upstream/apis/avm"
+ 
+ /**
+  * @ignore
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/apis/evm/api.test.ts test/upstream/apis/evm/api.test.ts
+--- upstream/tests/apis/evm/api.test.ts	2022-05-24 21:35:33.000000000 +0100
++++ test/upstream/apis/evm/api.test.ts	2026-10-25 04:52:01.000000000 +0000
+@@ -1,9 +1,9 @@
+ import mockAxios from "jest-mock-axios"
+-import { Avalanche, BN } from "src"
+-import { EVMAPI } from "../../../src/apis/evm/api"
+-import BinTools from "../../../src/utils/bintools"
++import { Avalanche, BN } from "../../../../src/upstream"
++import { EVMAPI } from "../../../../src/upstream/apis/evm/api"
++import BinTools from "../../../../src/upstream/utils/bintools"
+ import * as bech32 from "bech32"
+-import { Defaults } from "../../../src/utils/constants"
++import { Defaults } from "../../../../src/upstream/utils/constants"
+ import { HttpResponse } from "jest-mock-axios/dist/lib/mock-axios-types"
+ 
+ /**
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/apis/evm/constants.test.ts test/upstream/apis/evm/constants.test.ts
+--- upstream/tests/apis/evm/constants.test.ts	2022-05-24 21:35:33.000000000 +0100
++++ test/upstream/apis/evm/constants.test.ts	2026-10-25 04:52:01.000000000 +0000
+@@ -1,5 +1,5 @@
+-import { BN } from "src"
+-import { Defaults, Networks, Network } from "../../../src/utils/constants"
++import { BN } from "../../../../src/upstream"
++import { Defaults, Networks, Network } from "../../../../src/upstream/utils/constants"
+ 
+ describe("EVMConstants", (): void => {
+   describe("Compare min and max gas prices", (): void => {
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/apis/evm/inputs.test.ts test/upstream/apis/evm/inputs.test.ts
+--- upstream/tests/apis/evm/inputs.test.ts	2021-11-09 18:20:49.000000000 +0000
++++ test/upstream/apis/evm/inputs.test.ts	2026-10-25 04:50:41.000000000 +0000
+@@ -1,22 +1,22 @@
+-import { UTXOSet, UTXO } from "../../../src/apis/avm/utxos"
+-import { KeyChain } from "../../../src/apis/avm/keychain"
++import { UTXOSet, UTXO } from "../../../../src/upstream/apis/avm/utxos"
++import { KeyChain } from "../../../../src/upstream/apis/avm/keychain"
+ import {
+   SECPTransferInput,
+   TransferableInput
+-} from "../../../src/apis/avm/inputs"
++} from "../../../../src/upstream/apis/avm/inputs"
+ import createHash from "create-hash"
+-import BinTools from "../../../src/utils/bintools"
++import BinTools from "../../../../src/upstream/utils/bintools"
+ import BN from "bn.js"
+ import { Buffer } from "buffer/"
+ import {
+   SECPTransferOutput,
+   AmountOutput,
+   TransferableOutput
+-} from "../../../src/apis/avm/outputs"
+-import { EVMConstants } from "../../../src/apis/evm/constants"
+-import { Input } from "../../../src/common/input"
+-import { Output } from "../../../src/common/output"
+-import { EVMInput } from "../../../src/apis/evm"
++} from "../../../../src/upstream/apis/avm/outputs"
++import { EVMConstants } from "../../../../src/upstream/apis/evm/constants"
++import { Input } from "../../../../src/upstream/common/input"
++import { Output } from "../../../../src/upstream/common/output"
++import { EVMInput } from "../../../../src/upstream/apis/evm"
+ 
+ /**
+  * @ignore
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/apis/evm/keychain.test.ts test/upstream/apis/evm/keychain.test.ts
+--- upstream/tests/apis/evm/keychain.test.ts	2022-05-24 21:35:33.000000000 +0100
++++ test/upstream/apis/evm/keychain.test.ts	2026-10-25 05:13:31.000000000 +0000
+@@ -1,8 +1,8 @@
+-import { KeyChain, KeyPair } from "../../../src/apis/avm/keychain"
+-import { Avalanche } from "../../../src/index"
++import { KeyChain, KeyPair } from "../../../../src/upstream/apis/avm/keychain"
++import { Avalanche } from "../../../../src/upstream/index"
+ import { Buffer } from "buffer/"
+ import createHash from "create-hash"
+-import BinTools from "../../../src/utils/bintools"
++import BinTools from "../../../../src/upstream/utils/bintools"
+ 
+ const bintools: BinTools = BinTools.getInstance()
+ const alias: string = "C"
+@@ -33,19 +33,19 @@
+     avalanche.setNetworkID(2)
+     hrp = avalanche.getHRP()
+     networkID = avalanche.getNetworkID()
+-    expect(hrp).toBe("cascade")
++    expect(hrp).toBe("custom")
+     expect(networkID).toBe(2)
+ 
+     avalanche.setNetworkID(3)
+     hrp = avalanche.getHRP()
+     networkID = avalanche.getNetworkID()
+-    expect(hrp).toBe("denali")
++    expect(hrp).toBe("custom")
+     expect(networkID).toBe(3)
+ 
+     avalanche.setNetworkID(4)
+     hrp = avalanche.getHRP()
+     networkID = avalanche.getNetworkID()
+-    expect(hrp).toBe("everest")
++    expect(hrp).toBe("custom")
+     expect(networkID).toBe(4)
+ 
+     avalanche.setNetworkID(0)
+@@ -57,9 +57,33 @@
+     avalanche.setNetworkID(1)
+     hrp = avalanche.getHRP()
+     networkID = avalanche.getNetworkID()
+-    expect(hrp).toBe("avax")
++    expect(hrp).toBe("dijets")
+     expect(networkID).toBe(1)
+ 
++    // DIJETS: Dijets HRPs (dijetsnodesgo utils/constants/network_ids.go); 2-4 are not Dijets networks.
++
++    avalanche.setNetworkID(5)
++
++    hrp = avalanche.getHRP()
++
++    networkID = avalanche.getNetworkID()
++
++    expect(hrp).toBe("lothar")
++
++    expect(networkID).toBe(5)
++
++
++    avalanche.setNetworkID(10)
++
++    hrp = avalanche.getHRP()
++
++    networkID = avalanche.getNetworkID()
++
++    expect(hrp).toBe("testing")
++
++    expect(networkID).toBe(10)
++
++
+     avalanche.setNetworkID(12345)
+     hrp = avalanche.getHRP()
+     networkID = avalanche.getNetworkID()
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/apis/evm/outputs.test.ts test/upstream/apis/evm/outputs.test.ts
+--- upstream/tests/apis/evm/outputs.test.ts	2021-11-09 18:20:49.000000000 +0000
++++ test/upstream/apis/evm/outputs.test.ts	2026-10-25 04:50:41.000000000 +0000
+@@ -1,4 +1,4 @@
+-import { EVMOutput } from "../../../src/apis/evm"
++import { EVMOutput } from "../../../../src/upstream/apis/evm"
+ 
+ describe("Inputs", () => {
+   test("EVMOutput comparator", () => {
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/apis/evm/tx.test.ts test/upstream/apis/evm/tx.test.ts
+--- upstream/tests/apis/evm/tx.test.ts	2022-05-24 21:35:33.000000000 +0100
++++ test/upstream/apis/evm/tx.test.ts	2026-10-25 04:52:01.000000000 +0000
+@@ -3,16 +3,16 @@
+   ImportTx,
+   SECPTransferInput,
+   TransferableInput
+-} from "../../../src/apis/evm"
++} from "../../../../src/upstream/apis/evm"
+ import {
+   Defaults,
+   MILLIAVAX,
+   PlatformChainID
+-} from "../../../src/utils/constants"
+-import { ONEAVAX } from "../../../src/utils/constants"
+-import { EVMOutput } from "../../../src/apis/evm"
++} from "../../../../src/upstream/utils/constants"
++import { ONEAVAX } from "../../../../src/upstream/utils/constants"
++import { EVMOutput } from "../../../../src/upstream/apis/evm"
+ import BN from "bn.js"
+-import { BinTools, Buffer } from "src"
++import { BinTools, Buffer } from "../../../../src/upstream"
+ const networkID: number = 1337
+ const cHexAddress1: string = "0x8db97C7cEcE249c2b98bDC0226Cc4C2A57BF52FC"
+ const bintools: BinTools = BinTools.getInstance()
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/apis/health/api.test.ts test/upstream/apis/health/api.test.ts
+--- upstream/tests/apis/health/api.test.ts	2022-05-21 06:29:16.000000000 +0100
++++ test/upstream/apis/health/api.test.ts	2026-10-25 04:52:01.000000000 +0000
+@@ -1,8 +1,8 @@
+ import mockAxios from "jest-mock-axios"
+ 
+-import { Avalanche } from "src"
+-import { HealthAPI } from "../../../src/apis/health/api"
+-import { HealthResponse } from "../../../src/apis/health/interfaces"
++import { Avalanche } from "../../../../src/upstream"
++import { HealthAPI } from "../../../../src/upstream/apis/health/api"
++import { HealthResponse } from "../../../../src/upstream/apis/health/interfaces"
+ import { HttpResponse } from "jest-mock-axios/dist/lib/mock-axios-types"
+ 
+ describe("Health", (): void => {
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/apis/index/api.test.ts test/upstream/apis/index/api.test.ts
+--- upstream/tests/apis/index/api.test.ts	2022-05-24 21:35:33.000000000 +0100
++++ test/upstream/apis/index/api.test.ts	2026-10-25 04:52:01.000000000 +0000
+@@ -1,8 +1,8 @@
+ import mockAxios from "jest-mock-axios"
+ import { HttpResponse } from "jest-mock-axios/dist/lib/mock-axios-types"
+-import { Avalanche } from "src"
+-import { IsAcceptedResponse } from "src/apis/index/interfaces"
+-import { IndexAPI } from "../../../src/apis/index/api"
++import { Avalanche } from "../../../../src/upstream"
++import { IsAcceptedResponse } from "../../../../src/upstream/apis/index/interfaces"
++import { IndexAPI } from "../../../../src/upstream/apis/index/api"
+ 
+ describe("Index", () => {
+   const ip: string = "127.0.0.1"
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/apis/info/api.test.ts test/upstream/apis/info/api.test.ts
+--- upstream/tests/apis/info/api.test.ts	2022-05-24 21:35:33.000000000 +0100
++++ test/upstream/apis/info/api.test.ts	2026-10-25 04:52:01.000000000 +0000
+@@ -1,11 +1,11 @@
+ import mockAxios from "jest-mock-axios"
+-import { Avalanche } from "src"
+-import { InfoAPI } from "../../../src/apis/info/api"
++import { Avalanche } from "../../../../src/upstream"
++import { InfoAPI } from "../../../../src/upstream/apis/info/api"
+ import BN from "bn.js"
+ import {
+   PeersResponse,
+   UptimeResponse
+-} from "../../../src/apis/info/interfaces"
++} from "../../../../src/upstream/apis/info/interfaces"
+ import { HttpResponse } from "jest-mock-axios/dist/lib/mock-axios-types"
+ 
+ describe("Info", (): void => {
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/apis/keystore/api.test.ts test/upstream/apis/keystore/api.test.ts
+--- upstream/tests/apis/keystore/api.test.ts	2021-11-09 18:20:49.000000000 +0000
++++ test/upstream/apis/keystore/api.test.ts	2026-10-25 04:52:01.000000000 +0000
+@@ -1,7 +1,7 @@
+ import mockAxios from "jest-mock-axios"
+ import { HttpResponse } from "jest-mock-axios/dist/lib/mock-axios-types"
+-import { Avalanche } from "src"
+-import { KeystoreAPI } from "../../../src/apis/keystore/api"
++import { Avalanche } from "../../../../src/upstream"
++import { KeystoreAPI } from "../../../../src/upstream/apis/keystore/api"
+ 
+ describe("Keystore", (): void => {
+   const ip: string = "127.0.0.1"
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/apis/metrics/api.test.ts test/upstream/apis/metrics/api.test.ts
+--- upstream/tests/apis/metrics/api.test.ts	2021-11-09 18:20:49.000000000 +0000
++++ test/upstream/apis/metrics/api.test.ts	2026-10-25 04:52:01.000000000 +0000
+@@ -1,7 +1,7 @@
+ import mockAxios from "jest-mock-axios"
+ import { HttpResponse } from "jest-mock-axios/dist/lib/mock-axios-types"
+-import { Avalanche } from "src"
+-import { MetricsAPI } from "../../../src/apis/metrics/api"
++import { Avalanche } from "../../../../src/upstream"
++import { MetricsAPI } from "../../../../src/upstream/apis/metrics/api"
+ 
+ describe("Metrics", (): void => {
+   const ip: string = "127.0.0.1"
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/apis/platformvm/addsubnetvalidatortx.test.ts test/upstream/apis/platformvm/addsubnetvalidatortx.test.ts
+--- upstream/tests/apis/platformvm/addsubnetvalidatortx.test.ts	2022-06-13 17:56:14.000000000 +0100
++++ test/upstream/apis/platformvm/addsubnetvalidatortx.test.ts	2026-10-25 04:52:01.000000000 +0000
+@@ -4,8 +4,8 @@
+   AddSubnetValidatorTx,
+   PlatformVMConstants,
+   SubnetAuth
+-} from "src/apis/platformvm"
+-import { bufferToNodeIDString } from "src/utils"
++} from "../../../../src/upstream/apis/platformvm"
++import { bufferToNodeIDString } from "../../../../src/upstream/utils"
+ 
+ describe("AddSubnetValidatorTx", (): void => {
+   const addSubnetValidatorTxHex: string =
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/apis/platformvm/api.test.ts test/upstream/apis/platformvm/api.test.ts
+--- upstream/tests/apis/platformvm/api.test.ts	2022-06-17 07:14:53.000000000 +0100
++++ test/upstream/apis/platformvm/api.test.ts	2026-10-25 05:17:52.000000000 +0000
+@@ -1,41 +1,41 @@
+ import mockAxios from "jest-mock-axios"
+-import { Avalanche } from "src"
+-import { PlatformVMAPI } from "../../../src/apis/platformvm/api"
++import { Avalanche } from "../../../../src/upstream"
++import { PlatformVMAPI } from "../../../../src/upstream/apis/platformvm/api"
+ import { Buffer } from "buffer/"
+ import BN from "bn.js"
+-import BinTools from "../../../src/utils/bintools"
++import BinTools from "../../../../src/upstream/utils/bintools"
+ import * as bech32 from "bech32"
+-import { Defaults, PlatformChainID } from "../../../src/utils/constants"
+-import { UTXOSet } from "../../../src/apis/platformvm/utxos"
+-import { PersistanceOptions } from "../../../src/utils/persistenceoptions"
+-import { KeyChain } from "../../../src/apis/platformvm/keychain"
++import { Defaults, PlatformChainID } from "../../../../src/upstream/utils/constants"
++import { UTXOSet } from "../../../../src/upstream/apis/platformvm/utxos"
++import { PersistanceOptions } from "../../../../src/upstream/utils/persistenceoptions"
++import { KeyChain } from "../../../../src/upstream/apis/platformvm/keychain"
+ import {
+   SECPTransferOutput,
+   TransferableOutput,
+   AmountOutput,
+   ParseableOutput,
+   StakeableLockOut
+-} from "../../../src/apis/platformvm/outputs"
++} from "../../../../src/upstream/apis/platformvm/outputs"
+ import {
+   TransferableInput,
+   SECPTransferInput,
+   AmountInput,
+   StakeableLockIn
+-} from "../../../src/apis/platformvm/inputs"
+-import { UTXO } from "../../../src/apis/platformvm/utxos"
++} from "../../../../src/upstream/apis/platformvm/inputs"
++import { UTXO } from "../../../../src/upstream/apis/platformvm/utxos"
+ import createHash from "create-hash"
+-import { UnsignedTx, Tx } from "../../../src/apis/platformvm/tx"
+-import { UnixNow } from "../../../src/utils/helperfunctions"
+-import { UTF8Payload } from "../../../src/utils/payload"
+-import { NodeIDStringToBuffer } from "../../../src/utils/helperfunctions"
+-import { ONEAVAX } from "../../../src/utils/constants"
++import { UnsignedTx, Tx } from "../../../../src/upstream/apis/platformvm/tx"
++import { UnixNow } from "../../../../src/upstream/utils/helperfunctions"
++import { UTF8Payload } from "../../../../src/upstream/utils/payload"
++import { NodeIDStringToBuffer } from "../../../../src/upstream/utils/helperfunctions"
++import { ONEAVAX } from "../../../../src/upstream/utils/constants"
+ import {
+   Serializable,
+   Serialization,
+   SerializedEncoding,
+   SerializedType
+-} from "../../../src/utils/serialization"
+-import { AddValidatorTx } from "../../../src/apis/platformvm/validationtx"
++} from "../../../../src/upstream/utils/serialization"
++import { AddValidatorTx } from "../../../../src/upstream/apis/platformvm/validationtx"
+ import {
+   Blockchain,
+   GetMinStakeResponse,
+@@ -43,13 +43,13 @@
+   Subnet,
+   GetTxStatusResponse,
+   GetValidatorsAtResponse
+-} from "../../../src/apis/platformvm/interfaces"
+-import { ErrorResponseObject } from "../../../src/utils/errors"
++} from "../../../../src/upstream/apis/platformvm/interfaces"
++import { ErrorResponseObject } from "../../../../src/upstream/utils/errors"
+ import { HttpResponse } from "jest-mock-axios/dist/lib/mock-axios-types"
+ import {
+   GetBalanceResponse,
+   GetUTXOsResponse
+-} from "src/apis/platformvm/interfaces"
++} from "../../../../src/upstream/apis/platformvm/interfaces"
+ 
+ /**
+  * @ignore
+@@ -112,7 +112,7 @@
+   let alias: string
+ 
+   const addrA: string =
+-    "P-" +
++    "M-" +
+     bech32.bech32.encode(
+       avalanche.getHRP(),
+       bech32.bech32.toWords(
+@@ -120,7 +120,7 @@
+       )
+     )
+   const addrB: string =
+-    "P-" +
++    "M-" +
+     bech32.bech32.encode(
+       avalanche.getHRP(),
+       bech32.bech32.toWords(
+@@ -128,7 +128,7 @@
+       )
+     )
+   const addrC: string =
+-    "P-" +
++    "M-" +
+     bech32.bech32.encode(
+       avalanche.getHRP(),
+       bech32.bech32.toWords(
+@@ -160,7 +160,8 @@
+   })
+ 
+   test("refreshBlockchainID", async (): Promise<void> => {
+-    let n3bcID: string = Defaults.network[3].P["blockchainID"]
++    // DIJETS: network 3 (Avalanche Denali) does not exist on Dijets; use Lothar (5).
++    let n3bcID: string = Defaults.network[5].P["blockchainID"]
+     let testAPI: PlatformVMAPI = new PlatformVMAPI(avalanche, "/ext/bc/P")
+     let bc1: string = testAPI.getBlockchainID()
+     expect(bc1).toBe(PlatformChainID)
+@@ -1557,7 +1558,7 @@
+       const locktime1: BN = new BN(0)
+       const threshold: number = 1
+ 
+-      const stakeableLockTime1: BN = new BN(1633824000)
++      const stakeableLockTime1: BN = UnixNow().sub(new BN(365 * 24 * 60 * 60)) // DIJETS: was 1633824000; relative so the test does not expire
+       const secpTransferOutput1: SECPTransferOutput = new SECPTransferOutput(
+         amount1,
+         addrbuff1,
+@@ -1575,7 +1576,7 @@
+         stakeableLockTime1,
+         parseableOutput1
+       )
+-      const stakeableLockTime2: BN = new BN(1733824000)
++      const stakeableLockTime2: BN = UnixNow().add(new BN(365 * 24 * 60 * 60)) // DIJETS: was 1733824000 (Dec 2024), which has passed
+       const secpTransferOutput2: SECPTransferOutput = new SECPTransferOutput(
+         amount2,
+         addrbuff1,
+@@ -1733,7 +1734,7 @@
+       const locktime1: BN = new BN(0)
+       const threshold: number = 1
+ 
+-      const stakeableLockTime1: BN = new BN(1633824000)
++      const stakeableLockTime1: BN = UnixNow().sub(new BN(365 * 24 * 60 * 60)) // DIJETS: was 1633824000; relative so the test does not expire
+       const secpTransferOutput1: SECPTransferOutput = new SECPTransferOutput(
+         amount1,
+         addrbuff1,
+@@ -1751,7 +1752,7 @@
+         stakeableLockTime1,
+         parseableOutput1
+       )
+-      const stakeableLockTime2: BN = new BN(1733824000)
++      const stakeableLockTime2: BN = UnixNow().add(new BN(365 * 24 * 60 * 60)) // DIJETS: was 1733824000 (Dec 2024), which has passed
+       const secpTransferOutput2: SECPTransferOutput = new SECPTransferOutput(
+         amount2,
+         addrbuff1,
+@@ -1908,7 +1909,7 @@
+       const locktime1: BN = new BN(0)
+       const threshold: number = 1
+ 
+-      const stakeableLockTime1: BN = new BN(1633824000)
++      const stakeableLockTime1: BN = UnixNow().sub(new BN(365 * 24 * 60 * 60)) // DIJETS: was 1633824000; relative so the test does not expire
+       const secpTransferOutput0: SECPTransferOutput = new SECPTransferOutput(
+         amount1,
+         addrbuff1,
+@@ -1932,7 +1933,7 @@
+         stakeableLockTime1,
+         parseableOutput1
+       )
+-      const stakeableLockTime2: BN = new BN(1733824000)
++      const stakeableLockTime2: BN = UnixNow().add(new BN(365 * 24 * 60 * 60)) // DIJETS: was 1733824000 (Dec 2024), which has passed
+       const secpTransferOutput2: SECPTransferOutput = new SECPTransferOutput(
+         amount2,
+         addrbuff1,
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/apis/platformvm/createchaintx.test.ts test/upstream/apis/platformvm/createchaintx.test.ts
+--- upstream/tests/apis/platformvm/createchaintx.test.ts	2022-05-24 21:35:33.000000000 +0100
++++ test/upstream/apis/platformvm/createchaintx.test.ts	2026-10-25 04:52:01.000000000 +0000
+@@ -1,8 +1,8 @@
+-import BinTools from "../../../src/utils/bintools"
++import BinTools from "../../../../src/upstream/utils/bintools"
+ import { Buffer } from "buffer/"
+-import { PlatformVMConstants } from "../../../src/apis/platformvm/constants"
+-import { GenesisAsset, GenesisData } from "../../../src/index"
+-import { CreateChainTx, SubnetAuth } from "src/apis/platformvm"
++import { PlatformVMConstants } from "../../../../src/upstream/apis/platformvm/constants"
++import { GenesisAsset, GenesisData } from "../../../../src/upstream/index"
++import { CreateChainTx, SubnetAuth } from "../../../../src/upstream/apis/platformvm"
+ 
+ describe("CreateChainTx", (): void => {
+   /**
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/apis/platformvm/createsubnettx.test.ts test/upstream/apis/platformvm/createsubnettx.test.ts
+--- upstream/tests/apis/platformvm/createsubnettx.test.ts	2022-05-24 21:35:33.000000000 +0100
++++ test/upstream/apis/platformvm/createsubnettx.test.ts	2026-10-25 04:52:01.000000000 +0000
+@@ -1,8 +1,8 @@
+ import BN from "bn.js"
+ import { Buffer } from "buffer/"
+-import { SECPOwnerOutput } from "../../../src/apis/platformvm/outputs"
+-import { PlatformVMConstants } from "../../../src/apis/platformvm/constants"
+-import { CreateSubnetTx } from "src/apis/platformvm"
++import { SECPOwnerOutput } from "../../../../src/upstream/apis/platformvm/outputs"
++import { PlatformVMConstants } from "../../../../src/upstream/apis/platformvm/constants"
++import { CreateSubnetTx } from "../../../../src/upstream/apis/platformvm"
+ 
+ describe("CreateSubnetTx", (): void => {
+   const createSubnetTxHex: string =
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/apis/platformvm/inputs.test.ts test/upstream/apis/platformvm/inputs.test.ts
+--- upstream/tests/apis/platformvm/inputs.test.ts	2021-11-09 18:20:49.000000000 +0000
++++ test/upstream/apis/platformvm/inputs.test.ts	2026-10-25 04:50:41.000000000 +0000
+@@ -1,21 +1,21 @@
+-import { UTXOSet, UTXO } from "../../../src/apis/platformvm/utxos"
+-import { KeyChain } from "../../../src/apis/platformvm/keychain"
++import { UTXOSet, UTXO } from "../../../../src/upstream/apis/platformvm/utxos"
++import { KeyChain } from "../../../../src/upstream/apis/platformvm/keychain"
+ import {
+   SECPTransferInput,
+   TransferableInput
+-} from "../../../src/apis/platformvm/inputs"
++} from "../../../../src/upstream/apis/platformvm/inputs"
+ import createHash from "create-hash"
+-import BinTools from "../../../src/utils/bintools"
++import BinTools from "../../../../src/upstream/utils/bintools"
+ import BN from "bn.js"
+ import { Buffer } from "buffer/"
+ import {
+   SECPTransferOutput,
+   AmountOutput,
+   TransferableOutput
+-} from "../../../src/apis/platformvm/outputs"
+-import { PlatformVMConstants } from "../../../src/apis/platformvm/constants"
+-import { Input } from "../../../src/common/input"
+-import { Output } from "../../../src/common/output"
++} from "../../../../src/upstream/apis/platformvm/outputs"
++import { PlatformVMConstants } from "../../../../src/upstream/apis/platformvm/constants"
++import { Input } from "../../../../src/upstream/common/input"
++import { Output } from "../../../../src/upstream/common/output"
+ 
+ /**
+  * @ignore
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/apis/platformvm/keychain.test.ts test/upstream/apis/platformvm/keychain.test.ts
+--- upstream/tests/apis/platformvm/keychain.test.ts	2022-05-24 21:35:33.000000000 +0100
++++ test/upstream/apis/platformvm/keychain.test.ts	2026-10-25 05:13:31.000000000 +0000
+@@ -1,8 +1,8 @@
+-import { KeyChain, KeyPair } from "../../../src/apis/platformvm/keychain"
+-import { Avalanche } from "../../../src/index"
++import { KeyChain, KeyPair } from "../../../../src/upstream/apis/platformvm/keychain"
++import { Avalanche } from "../../../../src/upstream/index"
+ import { Buffer } from "buffer/"
+ import createHash from "create-hash"
+-import BinTools from "../../../src/utils/bintools"
++import BinTools from "../../../../src/upstream/utils/bintools"
+ 
+ const bintools: BinTools = BinTools.getInstance()
+ const alias: string = "P"
+@@ -32,19 +32,19 @@
+     avalanche.setNetworkID(2)
+     hrp = avalanche.getHRP()
+     networkID = avalanche.getNetworkID()
+-    expect(hrp).toBe("cascade")
++    expect(hrp).toBe("custom")
+     expect(networkID).toBe(2)
+ 
+     avalanche.setNetworkID(3)
+     hrp = avalanche.getHRP()
+     networkID = avalanche.getNetworkID()
+-    expect(hrp).toBe("denali")
++    expect(hrp).toBe("custom")
+     expect(networkID).toBe(3)
+ 
+     avalanche.setNetworkID(4)
+     hrp = avalanche.getHRP()
+     networkID = avalanche.getNetworkID()
+-    expect(hrp).toBe("everest")
++    expect(hrp).toBe("custom")
+     expect(networkID).toBe(4)
+ 
+     avalanche.setNetworkID(0)
+@@ -56,9 +56,33 @@
+     avalanche.setNetworkID(1)
+     hrp = avalanche.getHRP()
+     networkID = avalanche.getNetworkID()
+-    expect(hrp).toBe("avax")
++    expect(hrp).toBe("dijets")
+     expect(networkID).toBe(1)
+ 
++    // DIJETS: Dijets HRPs (dijetsnodesgo utils/constants/network_ids.go); 2-4 are not Dijets networks.
++
++    avalanche.setNetworkID(5)
++
++    hrp = avalanche.getHRP()
++
++    networkID = avalanche.getNetworkID()
++
++    expect(hrp).toBe("lothar")
++
++    expect(networkID).toBe(5)
++
++
++    avalanche.setNetworkID(10)
++
++    hrp = avalanche.getHRP()
++
++    networkID = avalanche.getNetworkID()
++
++    expect(hrp).toBe("testing")
++
++    expect(networkID).toBe(10)
++
++
+     avalanche.setNetworkID(12345)
+     hrp = avalanche.getHRP()
+     networkID = avalanche.getNetworkID()
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/apis/platformvm/outputs.test.ts test/upstream/apis/platformvm/outputs.test.ts
+--- upstream/tests/apis/platformvm/outputs.test.ts	2021-11-09 18:20:49.000000000 +0000
++++ test/upstream/apis/platformvm/outputs.test.ts	2026-10-25 04:50:41.000000000 +0000
+@@ -1,11 +1,11 @@
+ import BN from "bn.js"
+ import { Buffer } from "buffer/"
+-import BinTools from "../../../src/utils/bintools"
++import BinTools from "../../../../src/upstream/utils/bintools"
+ import {
+   SECPTransferOutput,
+   SelectOutputClass
+-} from "../../../src/apis/platformvm/outputs"
+-import { Output } from "../../../src/common/output"
++} from "../../../../src/upstream/apis/platformvm/outputs"
++import { Output } from "../../../../src/upstream/common/output"
+ 
+ const bintools: BinTools = BinTools.getInstance()
+ 
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/apis/platformvm/subnetauth.test.ts test/upstream/apis/platformvm/subnetauth.test.ts
+--- upstream/tests/apis/platformvm/subnetauth.test.ts	2022-05-24 21:35:33.000000000 +0100
++++ test/upstream/apis/platformvm/subnetauth.test.ts	2026-10-25 04:52:01.000000000 +0000
+@@ -1,6 +1,6 @@
+ import { Buffer } from "buffer/"
+-import { SubnetAuth } from "src/apis/platformvm"
+-import BinTools from "src/utils/bintools"
++import { SubnetAuth } from "../../../../src/upstream/apis/platformvm"
++import BinTools from "../../../../src/upstream/utils/bintools"
+ 
+ /**
+  * @ignore
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/apis/platformvm/tx.test.ts test/upstream/apis/platformvm/tx.test.ts
+--- upstream/tests/apis/platformvm/tx.test.ts	2022-05-24 21:35:33.000000000 +0100
++++ test/upstream/apis/platformvm/tx.test.ts	2026-10-25 04:50:41.000000000 +0000
+@@ -1,31 +1,31 @@
+ import mockAxios from "jest-mock-axios"
+-import { UTXOSet, UTXO } from "../../../src/apis/platformvm/utxos"
+-import { PlatformVMAPI } from "../../../src/apis/platformvm/api"
+-import { UnsignedTx, Tx } from "../../../src/apis/platformvm/tx"
+-import { KeyChain } from "../../../src/apis/platformvm/keychain"
++import { UTXOSet, UTXO } from "../../../../src/upstream/apis/platformvm/utxos"
++import { PlatformVMAPI } from "../../../../src/upstream/apis/platformvm/api"
++import { UnsignedTx, Tx } from "../../../../src/upstream/apis/platformvm/tx"
++import { KeyChain } from "../../../../src/upstream/apis/platformvm/keychain"
+ import {
+   SECPTransferInput,
+   TransferableInput
+-} from "../../../src/apis/platformvm/inputs"
++} from "../../../../src/upstream/apis/platformvm/inputs"
+ import createHash from "create-hash"
+-import BinTools from "../../../src/utils/bintools"
++import BinTools from "../../../../src/upstream/utils/bintools"
+ import BN from "bn.js"
+ import { Buffer } from "buffer/"
+ import {
+   SECPTransferOutput,
+   TransferableOutput
+-} from "../../../src/apis/platformvm/outputs"
+-import { PlatformVMConstants } from "../../../src/apis/platformvm/constants"
+-import { Avalanche, GenesisData } from "../../../src/index"
+-import { UTF8Payload } from "../../../src/utils/payload"
++} from "../../../../src/upstream/apis/platformvm/outputs"
++import { PlatformVMConstants } from "../../../../src/upstream/apis/platformvm/constants"
++import { Avalanche, GenesisData } from "../../../../src/upstream/index"
++import { UTF8Payload } from "../../../../src/upstream/utils/payload"
+ import {
+   NodeIDStringToBuffer,
+   UnixNow
+-} from "../../../src/utils/helperfunctions"
+-import { BaseTx } from "../../../src/apis/platformvm/basetx"
+-import { ImportTx } from "../../../src/apis/platformvm/importtx"
+-import { ExportTx } from "../../../src/apis/platformvm/exporttx"
+-import { PlatformChainID } from "../../../src/utils/constants"
++} from "../../../../src/upstream/utils/helperfunctions"
++import { BaseTx } from "../../../../src/upstream/apis/platformvm/basetx"
++import { ImportTx } from "../../../../src/upstream/apis/platformvm/importtx"
++import { ExportTx } from "../../../../src/upstream/apis/platformvm/exporttx"
++import { PlatformChainID } from "../../../../src/upstream/utils/constants"
+ import { HttpResponse } from "jest-mock-axios/dist/lib/mock-axios-types"
+ 
+ describe("Transactions", (): void => {
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/apis/platformvm/utxos.test.ts test/upstream/apis/platformvm/utxos.test.ts
+--- upstream/tests/apis/platformvm/utxos.test.ts	2022-05-24 21:35:33.000000000 +0100
++++ test/upstream/apis/platformvm/utxos.test.ts	2026-10-25 04:50:41.000000000 +0000
+@@ -1,10 +1,10 @@
+ import BN from "bn.js"
+ import { Buffer } from "buffer/"
+-import BinTools from "../../../src/utils/bintools"
+-import { UTXO, UTXOSet } from "../../../src/apis/platformvm/utxos"
+-import { AmountOutput } from "../../../src/apis/platformvm/outputs"
+-import { UnixNow } from "../../../src/utils/helperfunctions"
+-import { SerializedEncoding } from "../../../src/utils"
++import BinTools from "../../../../src/upstream/utils/bintools"
++import { UTXO, UTXOSet } from "../../../../src/upstream/apis/platformvm/utxos"
++import { AmountOutput } from "../../../../src/upstream/apis/platformvm/outputs"
++import { UnixNow } from "../../../../src/upstream/utils/helperfunctions"
++import { SerializedEncoding } from "../../../../src/upstream/utils"
+ 
+ const bintools: BinTools = BinTools.getInstance()
+ const display: SerializedEncoding = "display"
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/avalanche.test.ts test/upstream/avalanche.test.ts
+--- upstream/tests/avalanche.test.ts	2022-05-24 21:35:33.000000000 +0100
++++ test/upstream/avalanche.test.ts	2026-10-25 04:50:41.000000000 +0000
+@@ -1,12 +1,12 @@
+ import mockAxios from "jest-mock-axios"
+-import { Avalanche, AvalancheCore } from "../src"
+-import { AVMAPI } from "../src/apis/avm/api"
+-import { AdminAPI } from "../src/apis/admin/api"
+-import { HealthAPI } from "../src/apis/health/api"
+-import { InfoAPI } from "../src/apis/info/api"
+-import { KeystoreAPI } from "../src/apis/keystore/api"
+-import { MetricsAPI } from "../src/apis/metrics/api"
+-import { PlatformVMAPI } from "../src/apis/platformvm/api"
++import { Avalanche, AvalancheCore } from "../../src/upstream"
++import { AVMAPI } from "../../src/upstream/apis/avm/api"
++import { AdminAPI } from "../../src/upstream/apis/admin/api"
++import { HealthAPI } from "../../src/upstream/apis/health/api"
++import { InfoAPI } from "../../src/upstream/apis/info/api"
++import { KeystoreAPI } from "../../src/upstream/apis/keystore/api"
++import { MetricsAPI } from "../../src/upstream/apis/metrics/api"
++import { PlatformVMAPI } from "../../src/upstream/apis/platformvm/api"
+ import { TestAPI } from "./testlib"
+ import { AxiosRequestConfig } from "axios"
+ import { HttpResponse } from "jest-mock-axios/dist/lib/mock-axios-types"
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/common/payload.test.ts test/upstream/common/payload.test.ts
+--- upstream/tests/common/payload.test.ts	2022-05-24 21:35:33.000000000 +0100
++++ test/upstream/common/payload.test.ts	2026-10-25 05:26:50.000000000 +0000
+@@ -14,8 +14,8 @@
+   TXIDPayload,
+   JSONPayload,
+   EMAILPayload
+-} from "../../src/utils/payload"
+-import BinTools from "../../src/utils/bintools"
++} from "../../../src/upstream/utils/payload"
++import BinTools from "../../../src/upstream/utils/bintools"
+ import BN from "bn.js"
+ import * as bech32 from "bech32"
+ const payloadTypes: PayloadTypes = PayloadTypes.getInstance()
+@@ -174,24 +174,24 @@
+   })
+ 
+   test("XCHAINADDRPayload special cases", (): void => {
+-    const addr: string = `X-${bech}`
++    const addr: string = `V-${bech}`
+     const pl: XCHAINADDRPayload = new XCHAINADDRPayload(addr, hrp)
+     expect(pl.returnType(hrp)).toBe(addr)
+-    expect(pl.returnChainID()).toBe("X")
++    expect(pl.returnChainID()).toBe("V") // DIJETS: V-Chain prefix
+   })
+ 
+   test("PCHAINADDRPayload special cases", (): void => {
+-    const addr: string = `P-${bech}`
++    const addr: string = `M-${bech}`
+     const pl: PCHAINADDRPayload = new PCHAINADDRPayload(addr, hrp)
+     expect(pl.returnType(hrp)).toBe(addr)
+-    expect(pl.returnChainID()).toBe("P")
++    expect(pl.returnChainID()).toBe("M") // DIJETS: M-Chain prefix
+   })
+ 
+   test("CCHAINADDRPayload special cases", (): void => {
+-    const addr: string = `C-${bech}`
++    const addr: string = `U-${bech}`
+     const pl: CCHAINADDRPayload = new CCHAINADDRPayload(addr, hrp)
+     expect(pl.returnType(hrp)).toBe(addr)
+-    expect(pl.returnChainID()).toBe("C")
++    expect(pl.returnChainID()).toBe("U") // DIJETS: U-Chain prefix
+   })
+ 
+   // handles all of cb58EncodedPayload
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/common/secp256k1.test.ts test/upstream/common/secp256k1.test.ts
+--- upstream/tests/common/secp256k1.test.ts	2022-05-24 21:35:33.000000000 +0100
++++ test/upstream/common/secp256k1.test.ts	2026-10-25 04:52:01.000000000 +0000
+@@ -1,6 +1,6 @@
+ import { Buffer } from "buffer/"
+-import BinTools from "../../src/utils/bintools"
+-import { KeyPair } from "src/apis/evm"
++import BinTools from "../../../src/upstream/utils/bintools"
++import { KeyPair } from "../../../src/upstream/apis/evm"
+ 
+ const bintools: BinTools = BinTools.getInstance()
+ 
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/testlib.ts test/upstream/testlib.ts
+--- upstream/tests/testlib.ts	2021-11-09 18:20:49.000000000 +0000
++++ test/upstream/testlib.ts	2026-10-25 04:50:41.000000000 +0000
+@@ -1,6 +1,6 @@
+-import AvalancheCore from "../src/avalanche"
++import AvalancheCore from "../../src/upstream/avalanche"
+ import { AxiosRequestConfig } from "axios"
+-import { APIBase, RequestResponseData } from "../src/common/apibase"
++import { APIBase, RequestResponseData } from "../../src/upstream/common/apibase"
+ 
+ export class TestAPI extends APIBase {
+   TestGET = async (
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/utils/bintools.test.ts test/upstream/utils/bintools.test.ts
+--- upstream/tests/utils/bintools.test.ts	2022-07-01 17:35:10.000000000 +0100
++++ test/upstream/utils/bintools.test.ts	2026-10-25 05:21:44.000000000 +0000
+@@ -1,4 +1,4 @@
+-import BinTools from "src/utils/bintools"
++import BinTools from "../../../src/upstream/utils/bintools"
+ import BN from "bn.js"
+ import { Buffer } from "buffer/"
+ 
+@@ -316,69 +316,82 @@
+     addrs.forEach((address: string): void => {
+       bintools.stringToAddress(address)
+     })
++    // DIJETS: Lothar and mainnet addresses parse (re-encoded by dijetsnodesgo,
++    // tools/vectors); Avalanche's fuji and avax addresses, valid bech32 with
++    // valid checksums, are rejected.
+     addrs = [
+-      "X-fuji1dcfyuug87xqayl4fpp02z9dvknwhafds7d29h6",
+-      "X-fuji1ltghj033re64920k786uprcp82p9e36jtkmpm3",
+-      "X-fuji1dq4q9seql2spxrkd7rl82uck5ej3nvlhk79w6t"
++      "V-lothar1dcfyuug87xqayl4fpp02z9dvknwhafdsdw69nc",
++      "V-lothar1ltghj033re64920k786uprcp82p9e36jc4tpln",
++      "V-lothar1dq4q9seql2spxrkd7rl82uck5ej3nvlh9a4w7f"
+     ]
+     addrs.forEach((address: string): void => {
+       bintools.stringToAddress(address)
+     })
+     addrs = [
+-      "X-avax1dcfyuug87xqayl4fpp02z9dvknwhafdsjlw6m9",
+-      "X-avax1ltghj033re64920k786uprcp82p9e36j8yl7hw",
+-      "X-avax1dq4q9seql2spxrkd7rl82uck5ej3nvlh6vp3k5"
++      "V-dijets1dcfyuug87xqayl4fpp02z9dvknwhafdskr9veu",
++      "V-dijets1ltghj033re64920k786uprcp82p9e36jrc5g4h",
++      "V-dijets1dq4q9seql2spxrkd7rl82uck5ej3nvlh7s285d"
+     ]
+     addrs.forEach((address: string): void => {
+       bintools.stringToAddress(address)
+     })
+     addrs = [
+-      "P-local1dcfyuug87xqayl4fpp02z9dvknwhafdstvnucd",
+-      "P-local1ltghj033re64920k786uprcp82p9e36j7hzc5x",
+-      "P-local1dq4q9seql2spxrkd7rl82uck5ej3nvlhrluh4u"
++      "X-fuji1dcfyuug87xqayl4fpp02z9dvknwhafds7d29h6",
++      "X-avax1dcfyuug87xqayl4fpp02z9dvknwhafdsjlw6m9",
++      "V-avax1ltghj033re64920k786uprcp82p9e36j8yl7hw"
++    ]
++    addrs.forEach((address: string): void => {
++      expect((): void => {
++        bintools.stringToAddress(address)
++      }).toThrow("Error - Invalid HRP")
++    })
++    addrs = [
++      "M-local1dcfyuug87xqayl4fpp02z9dvknwhafdstvnucd",
++      "M-local1ltghj033re64920k786uprcp82p9e36j7hzc5x",
++      "M-local1dq4q9seql2spxrkd7rl82uck5ej3nvlhrluh4u"
+     ]
+     addrs.forEach((address: string): void => {
+       bintools.stringToAddress(address)
+     })
+     addrs = [
+-      "P-fuji1dcfyuug87xqayl4fpp02z9dvknwhafds7d29h6",
+-      "P-fuji1ltghj033re64920k786uprcp82p9e36jtkmpm3",
+-      "P-fuji1dq4q9seql2spxrkd7rl82uck5ej3nvlhk79w6t"
++      "M-lothar1dcfyuug87xqayl4fpp02z9dvknwhafdsdw69nc",
++      "M-lothar1ltghj033re64920k786uprcp82p9e36jc4tpln",
++      "M-lothar1dq4q9seql2spxrkd7rl82uck5ej3nvlh9a4w7f"
+     ]
+     addrs.forEach((address: string): void => {
+       bintools.stringToAddress(address)
+     })
+     addrs = [
+-      "P-avax1dcfyuug87xqayl4fpp02z9dvknwhafdsjlw6m9",
+-      "P-avax1ltghj033re64920k786uprcp82p9e36j8yl7hw",
+-      "P-avax1dq4q9seql2spxrkd7rl82uck5ej3nvlh6vp3k5"
++      "M-dijets1dcfyuug87xqayl4fpp02z9dvknwhafdskr9veu",
++      "M-dijets1ltghj033re64920k786uprcp82p9e36jrc5g4h",
++      "M-dijets1dq4q9seql2spxrkd7rl82uck5ej3nvlh7s285d"
+     ]
+     addrs.forEach((address: string): void => {
+       bintools.stringToAddress(address)
+     })
+ 
+     addrs = [
+-      "C-local1dcfyuug87xqayl4fpp02z9dvknwhafdstvnucd",
+-      "C-local1ltghj033re64920k786uprcp82p9e36j7hzc5x",
+-      "C-local1dq4q9seql2spxrkd7rl82uck5ej3nvlhrluh4u"
++      "U-local1dcfyuug87xqayl4fpp02z9dvknwhafdstvnucd",
++      "U-local1ltghj033re64920k786uprcp82p9e36j7hzc5x",
++      "U-local1dq4q9seql2spxrkd7rl82uck5ej3nvlhrluh4u"
+     ]
+     addrs.forEach((address: string): void => {
+       bintools.stringToAddress(address)
+     })
+ 
+     addrs = [
+-      "C-fuji1dcfyuug87xqayl4fpp02z9dvknwhafds7d29h6",
+-      "C-fuji1ltghj033re64920k786uprcp82p9e36jtkmpm3",
+-      "C-fuji1dq4q9seql2spxrkd7rl82uck5ej3nvlhk79w6t"
++      "U-lothar1dcfyuug87xqayl4fpp02z9dvknwhafdsdw69nc",
++      "U-lothar1ltghj033re64920k786uprcp82p9e36jc4tpln",
++      "U-lothar1dq4q9seql2spxrkd7rl82uck5ej3nvlh9a4w7f"
+     ]
+     addrs.forEach((address: string): void => {
+       bintools.stringToAddress(address)
+     })
+ 
+     addrs = [
+-      "C-avax1dcfyuug87xqayl4fpp02z9dvknwhafdsjlw6m9",
+-      "C-avax1ltghj033re64920k786uprcp82p9e36j8yl7hw",
+-      "C-avax1dq4q9seql2spxrkd7rl82uck5ej3nvlh6vp3k5"
++      "U-dijets1dcfyuug87xqayl4fpp02z9dvknwhafdskr9veu",
++      "U-dijets1ltghj033re64920k786uprcp82p9e36jrc5g4h",
++      "U-dijets1dq4q9seql2spxrkd7rl82uck5ej3nvlh7s285d"
+     ]
+     addrs.forEach((address: string): void => {
+       bintools.stringToAddress(address)
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/utils/db.test.ts test/upstream/utils/db.test.ts
+--- upstream/tests/utils/db.test.ts	2021-11-09 18:20:49.000000000 +0000
++++ test/upstream/utils/db.test.ts	2026-10-25 04:52:01.000000000 +0000
+@@ -1,4 +1,4 @@
+-import DB from "src/utils/db"
++import DB from "../../../src/upstream/utils/db"
+ 
+ describe("DB", (): void => {
+   test("instantiate singletone", (): void => {
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/utils/errors.test.ts test/upstream/utils/errors.test.ts
+--- upstream/tests/utils/errors.test.ts	2022-05-24 21:35:33.000000000 +0100
++++ test/upstream/utils/errors.test.ts	2026-10-25 04:52:01.000000000 +0000
+@@ -1,4 +1,4 @@
+-import BinTools from "../../src/utils/bintools"
++import BinTools from "../../../src/upstream/utils/bintools"
+ import {
+   AvalancheError,
+   AddressError,
+@@ -44,7 +44,7 @@
+   InvalidEntropy,
+   ProtocolError,
+   SubnetIdError
+-} from "src/utils"
++} from "../../../src/upstream/utils"
+ 
+ describe("Errors", (): void => {
+   test("AvalancheError", (): void => {
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/utils/hdnode.test.ts test/upstream/utils/hdnode.test.ts
+--- upstream/tests/utils/hdnode.test.ts	2021-11-09 18:20:49.000000000 +0000
++++ test/upstream/utils/hdnode.test.ts	2026-10-25 05:17:40.000000000 +0000
+@@ -1,6 +1,6 @@
+-import Avalanche, { HDNode, Mnemonic } from "src"
++import Avalanche, { HDNode, Mnemonic } from "../../../src/upstream"
+ import { Buffer } from "buffer/"
+-import { AVMAPI, KeyChain } from "src/apis/avm"
++import { AVMAPI, KeyChain } from "../../../src/upstream/apis/avm"
+ 
+ const ip: string = "localhost"
+ const port: number = 9650
+@@ -23,17 +23,19 @@
+   const msg: string = "bb413645935a9bf1ecf0c3d30df2d573"
+   const m: string =
+     "immune year obscure laptop wage diamond join glue ecology envelope box fade mixed cradle athlete absorb stick rival punch dinosaur skin blind benefit pretty"
++  // DIJETS: m/44'/9000'/0'/0/0-9 on Dijets mainnet (HRP dijets, V-Chain). Re-encoded from
++  // upstream's verified avax vectors by dijetsnodesgo's address.Format (tools/vectors).
+   const addrs: string[] = [
+-    "X-avax15qwuklmrfcmfw78yvka9pjsukjeevl4aveehq0",
+-    "X-avax13wqaxm6zgjq5qwzuyyxyl9yrz3edcgwgfht6gt",
+-    "X-avax1z3dn3vczxttts8dsdjfgtnkekf8nvqhhsj5stl",
+-    "X-avax1j6kze9n7r3e8wq6jta5mf6pd3fwnu0v9wygc8p",
+-    "X-avax1ngasfmvl8g63lzwznp0374myz7ajt4746g750m",
+-    "X-avax1pr7pzcggtrk6uap58sfsrlnhqhayly2gtlux9l",
+-    "X-avax1wwtn3gx7ke4ge2c29eg5sun36nyj55u4dle9gn",
+-    "X-avax13527pvlnxa4wrfgt0h8ya7nkjawqq29sv5s89x",
+-    "X-avax1gw6agtcsz969ugpqh2zx2lmjchg6npklvp43qq",
+-    "X-avax10agjetvj0a0vf6wtlh7s6ctr8ha8ch8km8z567"
++    "V-dijets15qwuklmrfcmfw78yvka9pjsukjeevl4ag9jpzk",
++    "V-dijets13wqaxm6zgjq5qwzuyyxyl9yrz3edcgwgdtqv2j",
++    "V-dijets1z3dn3vczxttts8dsdjfgtnkekf8nvqhh5wlxfx",
++    "V-dijets1j6kze9n7r3e8wq6jta5mf6pd3fwnu0v92crw9c",
++    "V-dijets1ngasfmvl8g63lzwznp0374myz7ajt474754zdz",
++    "V-dijets1pr7pzcggtrk6uap58sfsrlnhqhayly2g0rhs8x",
++    "V-dijets1wwtn3gx7ke4ge2c29eg5sun36nyj55u4frjn22",
++    "V-dijets13527pvlnxa4wrfgt0h8ya7nkjawqq29sggm38l",
++    "V-dijets1gw6agtcsz969ugpqh2zx2lmjchg6npklga78ze",
++    "V-dijets10agjetvj0a0vf6wtlh7s6ctr8ha8ch8klmfzc8"
+   ]
+ 
+   test("derive", (): void => {
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/utils/helperfunctions.test.ts test/upstream/utils/helperfunctions.test.ts
+--- upstream/tests/utils/helperfunctions.test.ts	2022-05-24 21:35:33.000000000 +0100
++++ test/upstream/utils/helperfunctions.test.ts	2026-10-25 04:52:01.000000000 +0000
+@@ -1,5 +1,5 @@
+-import { ExportTx, ImportTx, UnsignedTx } from "src/apis/evm"
+-import { calcBytesCost, costExportTx, costImportTx } from "src/utils"
++import { ExportTx, ImportTx, UnsignedTx } from "../../../src/upstream/apis/evm"
++import { calcBytesCost, costExportTx, costImportTx } from "../../../src/upstream/utils"
+ import { Buffer } from "buffer/"
+ 
+ describe("HelperFunctions", (): void => {
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/utils/mnemonic.test.ts test/upstream/utils/mnemonic.test.ts
+--- upstream/tests/utils/mnemonic.test.ts	2021-11-09 18:20:49.000000000 +0000
++++ test/upstream/utils/mnemonic.test.ts	2026-10-25 04:52:01.000000000 +0000
+@@ -1,4 +1,4 @@
+-import Mnemonic from "src/utils/mnemonic"
++import Mnemonic from "../../../src/upstream/utils/mnemonic"
+ import { Buffer } from "buffer/"
+ 
+ const randomBytes: any = require("randombytes")
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/utils/pubsub.test.ts test/upstream/utils/pubsub.test.ts
+--- upstream/tests/utils/pubsub.test.ts	2021-11-09 18:20:49.000000000 +0000
++++ test/upstream/utils/pubsub.test.ts	2026-10-25 04:52:01.000000000 +0000
+@@ -1,4 +1,4 @@
+-import { PubSub } from "src"
++import { PubSub } from "../../../src/upstream"
+ 
+ const pubsub: PubSub = new PubSub()
+ 
+diff -ruN -x fixture-network.ts /var/folders/3l/dxqgrl795c72brkmgbspzq800000gn/T/tmp.OH55BBCv/package/tests/utils/serialization.test.ts test/upstream/utils/serialization.test.ts
+--- upstream/tests/utils/serialization.test.ts	2022-05-24 21:35:33.000000000 +0100
++++ test/upstream/utils/serialization.test.ts	2026-10-25 05:20:39.000000000 +0000
+@@ -27,21 +27,22 @@
+   UTXO,
+   UTXOID,
+   UTXOSet
+-} from "src/apis/avm"
+-import { Address, Serialized, Signature } from "src/common"
++} from "../../../src/upstream/apis/avm"
++import { Address, Serialized, Signature } from "../../../src/upstream/common"
+ import {
+   DefaultNetworkID,
+   Defaults,
+   Serialization,
+   SerializedEncoding,
+   SerializedType
+-} from "../../src/utils"
+-import { getPreferredHRP } from "../../src/utils"
++} from "../../../src/upstream/utils"
++import { getPreferredHRP } from "../../../src/upstream/utils"
+ 
+ const serialization: Serialization = Serialization.getInstance()
+ 
+ describe("Serialization", (): void => {
+-  const address: string = "X-avax1wst8jt3z3fm9ce0z6akj3266zmgccdp03hjlaj"
++  // DIJETS: re-encoded for Dijets mainnet by dijetsnodesgo (tools/vectors)
++  const address: string = "V-dijets1wst8jt3z3fm9ce0z6akj3266zmgccdp04teflt"
+   const nodeID: string = "NodeID-MFrZFVCXPv5iCn6M9K6XduxGTYp891xXZ"
+   const privateKey: string =
+     "PrivateKey-ewoqjP7PxY4yr3iLTpLisriqt94hdyDFNgchSxGGztUrTXtNN"
+@@ -54,7 +55,7 @@
+   const bn: BN = new BN(9000)
+   const name: string = "BaseTx"
+   const denomination: Buffer = Buffer.alloc(1)
+-  const chainID: string = "X"
++  const chainID: string = "V"
+   const hrp: any = getPreferredHRP(1)
+ 
+   test("instance of", (): void => {
+@@ -328,7 +329,8 @@
+     const amount: BN = new BN(0)
+     const amountHex: string = "0000000000000000"
+     const bytes: string = "0000000000000000000000000000000000000000"
+-    const xAddress: string = "X-avax1pdurs53v6vtue9sw7am9ayjqh9mcnqe9s80sgn"
++    // DIJETS: re-encoded for Dijets mainnet by dijetsnodesgo (tools/vectors)
++    const xAddress: string = "V-dijets1pdurs53v6vtue9sw7am9ayjqh9mcnqe95myx22"
+     const xAddressHex: string = "0b7838522cd317cc960ef7765e9240b977898325"
+     const address: string = "X-local18jma8ppw3nhx5r4ap8clazz0dps7rv5u00z96u"
+     const bech32: SerializedType = "bech32"
+@@ -351,8 +353,9 @@
+         Defaults.network[12345]["X"].blockchainID,
+         cb58
+       )
++      // DIJETS: the local network's V-Chain ID in hex, from dijetsnodesgo (tools/vectors idhex)
+       const blockchainIDHex: string =
+-        "d891ad56056d9c01f18f43f58b5c784ad07a4a49cf3d1f11623804b5cba2c6bf"
++        "8e58633e1dae3e4db785960ec6d0846f4740be1ff1929a89c94ad28217c6c94f"
+       const defaultNetworkIDHex: string = "00000001"
+       const localNetworkIDHex: string = "00000539"
+       const outs: TransferableOutput[] = []
